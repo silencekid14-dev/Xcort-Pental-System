@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PENTAL Architecture – Offline Virtual Prototype</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --panel: #12151c;
+    --border: #1e2430;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --cpu: #3fb950;
+    --ram: #f78166;
+    --gpu: #d2a8ff;
+    --warn: #f0b429;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  #menu {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #12151c 0%, #0a0c10 70%);
+    z-index: 100;
+    transition: opacity 0.35s ease, visibility 0.35s;
+  }
+  #menu.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  #menu h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.35rem;
+  }
+  #menu .sub {
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin-bottom: 2.2rem;
+    max-width: 540px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .choice-row {
+    display: flex;
+    gap: 1.1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .choice {
+    width: 230px;
+    padding: 1.3rem 1.15rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+  }
+  .choice:hover {
+    border-color: var(--accent);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .choice .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 1.12rem;
+    margin-bottom: 0.3rem;
+  }
+  .choice.cpu .label { color: var(--cpu); }
+  .choice.ram .label { color: var(--ram); }
+  .choice.gpu .label { color: var(--gpu); }
+  .choice .desc {
+    font-size: 0.76rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  #viewport {
+    position: absolute;
+    inset: 0;
+    display: none;
+    background: #0a0c10;
+  }
+  #viewport.active { display: block; }
+
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 30;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(to bottom, rgba(10,12,16,0.92), transparent);
+    pointer-events: none;
+  }
+  #hud-left, #hud-right { pointer-events: auto; }
+  #title-bar {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+  #title-bar span { color: var(--muted); font-weight: 400; }
+  #back-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  #back-btn:hover { border-color: var(--accent); }
+
+  #stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 1400px;
+    overflow: hidden;
+  }
+
+  /* ========== 3D STACK CONTAINER ========== */
+  .stack {
+    position: relative;
+    width: 420px;
+    height: 420px;
+    transform-style: preserve-3d;
+    transition: transform 0.15s ease-out;
+  }
+
+  .layer {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 340px;
+    height: 340px;
+    margin-left: -170px;
+    margin-top: -170px;
+    border-radius: 6px;
+    transform-style: preserve-3d;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 0 40px rgba(0,0,0,0.5);
+  }
+  .layer-face {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    background: linear-gradient(145deg, #1a2332 0%, #0f1520 100%);
+    border: 1px solid #2a3548;
+    overflow: hidden;
+  }
+  .layer-label {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: #8b949e;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* ALUs grid */
+  .alu-grid {
+    position: absolute;
+    inset: 36px 20px 20px 20px;
+    display: grid;
+    gap: 6px;
+  }
+  .alu {
+    border-radius: 3px;
+    background: #3fb950;
+    box-shadow: 0 0 8px rgba(63,185,80,0.4);
+    transition: box-shadow 0.1s, background 0.15s;
+  }
+  .alu.pulse {
+    box-shadow: 0 0 14px rgba(63,185,80,0.85);
+  }
+
+  /* PMPW wires */
+  .wire-h, .wire-v {
+    position: absolute;
+    background: #58a6ff;
+    opacity: 0.7;
+    pointer-events: none;
+  }
+  .wire-h {
+    height: 2px;
+    left: 12px; right: 12px;
+    box-shadow: 0 0 6px #58a6ff;
+  }
+  .wire-v {
+    width: 2px;
+    top: 12px; bottom: 12px;
+    background: #f0b429;
+    box-shadow: 0 0 6px #f0b429;
+  }
+
+  /* Throlter sheet */
+  .throlter {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 360px;
+    height: 360px;
+    margin-left: -180px;
+    margin-top: -180px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, rgba(139,92,246,0.15), rgba(139,92,246,0.45), rgba(139,92,246,0.15));
+    border: 1px solid rgba(139,92,246,0.5);
+    box-shadow: 0 0 20px rgba(139,92,246,0.25);
+    pointer-events: none;
+  }
+  .throlter.glow {
+    box-shadow: 0 0 28px rgba(139,92,246,0.55);
+  }
+
+  /* TSV elevators */
+  .tsv {
+    position: absolute;
+    width: 4px;
+    background: linear-gradient(to bottom, #c9d1d9, #6b7280);
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(201,209,217,0.4);
+    transform: translateZ(0);
+  }
+
+  /* Particles */
+  .particle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #58a6ff;
+    box-shadow: 0 0 10px #58a6ff;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  /* Package base */
+  .package-base {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 400px;
+    height: 400px;
+    margin-left: -200px;
+    margin-top: -200px;
+    background: #0d1117;
+    border: 2px solid #30363d;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .pin {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #b8860b;
+    border-radius: 1px;
+  }
+
+  /* Controls + legend + proof */
+  #controls {
+    position: absolute;
+    top: 56px;
+    right: 14px;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  #controls button {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 0.74rem;
+    cursor: pointer;
+    text-align: left;
+    min-width: 150px;
+  }
+  #controls button:hover, #controls button.active {
+    border-color: var(--accent);
+    background: #1a2030;
+  }
+
+  #legend {
+    position: absolute;
+    top: 56px;
+    left: 14px;
+    z-index: 40;
+    background: rgba(18,21,28,0.92);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.7rem;
+    line-height: 1.55;
+    max-width: 200px;
+  }
+  #legend .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+  #legend .swatch {
+    width: 11px; height: 11px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  #live-proof {
+    position: absolute;
+    bottom: 38%;
+    right: 14px;
+    z-index: 40;
+    background: rgba(18,21,28,0.95);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 13px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    min-width: 210px;
+  }
+  #live-proof .title {
+    color: var(--muted);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  #live-proof .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 3px 0;
+  }
+  #live-proof .val { color: var(--accent); font-weight: 600; }
+  #live-proof .val.ok { color: #3fb950; }
+  #live-proof .val.hot { color: #f0b429; }
+
+  #info-panel {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    max-height: 34%;
+    overflow-y: auto;
+    background: rgba(10,12,16,0.94);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px 16px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    z-index: 30;
+  }
+  #info-panel h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem;
+    margin-bottom: 0.4rem;
+    color: var(--accent);
+  }
+  #info-panel .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 7px 12px;
+    margin: 8px 0;
+  }
+  #info-panel .metric {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 9px;
+  }
+  #info-panel .metric .k {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  #info-panel .metric .v {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-top: 1px;
+  }
+  #info-panel p { color: var(--muted); margin-top: 6px; }
+
+  #hint {
+    position: absolute;
+    bottom: 36%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.72rem;
+    color: var(--muted);
+    z-index: 25;
+    pointer-events: none;
+  }
+
+  /* PRAM specific cells */
+  .mem-cell {
+    width: 8px;
+    height: 8px;
+    background: #f78166;
+    border-radius: 1px;
+    opacity: 0.55;
+  }
+  .mem-cell.active {
+    opacity: 1;
+    box-shadow: 0 0 8px #f78166;
+  }
+
+  /* PGPU zone colors */
+  .alu.stet { background: #d2a8ff; box-shadow: 0 0 8px rgba(210,168,255,0.5); }
+  .alu.dtet-l0 { background: #3fb950; box-shadow: 0 0 8px rgba(63,185,80,0.5); }
+  .alu.dtet-l1 { background: #58a6ff; box-shadow: 0 0 8px rgba(88,166,255,0.5); }
+  .alu.dtet-l2 { background: #f0b429; box-shadow: 0 0 8px rgba(240,180,41,0.5); }
+  .alu.dtet-l3 { background: #f78166; box-shadow: 0 0 8px rgba(247,129,102,0.5); }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>PENTAL Virtual Prototype</h1>
+  <p class="sub">Select a component. Fully offline — no external libraries. Drag to rotate the stack. Shows physical topology, PMPW / TSV data paths, ALUs and the quantitative claims from the architecture specs.</p>
+  <div class="choice-row">
+    <div class="choice cpu" data-target="pcpu">
+      <div class="label">PCPU</div>
+      <div class="desc">4-layer 3D-stacked matrix processor. 16 cores, 64 ALUs, PMPW grid, Throlter sheets, TSV elevators. Target 5.0–5.2 GHz, 80–160 W.</div>
+    </div>
+    <div class="choice ram" data-target="pram">
+      <div class="label">PRAM</div>
+      <div class="desc">Cross-point memory stack with 4 096 dedicated TSV bitlines. Direct voltage-coordinate addressing. ~4.0 ns latency, 3.07 TB/s (16 GB banked).</div>
+    </div>
+    <div class="choice gpu" data-target="pgpu">
+      <div class="label">PGPU</div>
+      <div class="desc">Hybrid STET/DTET graphics engine. 16 384 independent ALUs across 4 layers. Physical divergence isolation. 6.0 GHz, ~300 W core.</div>
+    </div>
+  </div>
+</div>
+
+<div id="viewport">
+  <div id="hud">
+    <div id="hud-left"><div id="title-bar">—</div></div>
+    <div id="hud-right"><button id="back-btn">← Back to selection</button></div>
+  </div>
+  <div id="legend"></div>
+  <div id="controls"></div>
+  <div id="live-proof"></div>
+  <div id="hint">Drag to rotate · Scroll to zoom</div>
+  <div id="stage"><div class="stack" id="stack"></div></div>
+  <div id="info-panel"></div>
+</div>
+
+<script>
+/* ============================================================
+   PENTAL Offline Virtual Prototype
+   Pure CSS 3D + Canvas-free DOM geometry.
+   No external scripts. Works without network.
+   ============================================================ */
+
+const state = {
+  mode: null,
+  rotX: -28,
+  rotY: 32,
+  scale: 1,
+  dragging: false,
+  lastX: 0,
+  lastY: 0,
+  particles: [],
+  alus: [],
+  throlters: [],
+  cycleCount: 0,
+  dataMovedGB: 0,
+  lastT: performance.now(),
+  options: {
+    showFlow: true,
+    showHeat: true,
+    speed: 1,
+    stetMode: true
+  },
+  animId: null
+};
+
+/* ---------- Menu ---------- */
+document.querySelectorAll('.choice').forEach(el => {
+  el.addEventListener('click', () => {
+    const target = el.dataset.target;
+    document.getElementById('menu').classList.add('hidden');
+    startMode(target);
+  });
+});
+document.getElementById('back-btn').addEventListener('click', stopMode);
+
+function startMode(mode) {
+  state.mode = mode;
+  state.cycleCount = 0;
+  state.dataMovedGB = 0;
+  state.rotX = -28;
+  state.rotY = 32;
+  state.scale = 1;
+  document.getElementById('viewport').classList.add('active');
+  const stack = document.getElementById('stack');
+  stack.innerHTML = '';
+  state.particles = [];
+  state.alus = [];
+  state.throlters = [];
+
+  if (mode === 'pcpu') buildPCPU(stack);
+  else if (mode === 'pram') buildPRAM(stack);
+  else if (mode === 'pgpu') buildPGPU(stack);
+
+  applyTransform();
+  if (state.animId) cancelAnimationFrame(state.animId);
+  state.lastT = performance.now();
+  animate();
+}
+
+function stopMode() {
+  if (state.animId) cancelAnimationFrame(state.animId);
+  state.animId = null;
+  document.getElementById('viewport').classList.remove('active');
+  document.getElementById('menu').classList.remove('hidden');
+  document.getElementById('stack').innerHTML = '';
+  document.getElementById('controls').innerHTML = '';
+  document.getElementById('legend').innerHTML = '';
+  document.getElementById('info-panel').innerHTML = '';
+  document.getElementById('live-proof').innerHTML = '';
+  state.mode = null;
+}
+
+/* ---------- Interaction (drag rotate + wheel zoom) ---------- */
+const stage = document.getElementById('stage');
+stage.addEventListener('mousedown', e => {
+  state.dragging = true;
+  state.lastX = e.clientX;
+  state.lastY = e.clientY;
+});
+window.addEventListener('mouseup', () => { state.dragging = false; });
+window.addEventListener('mousemove', e => {
+  if (!state.dragging) return;
+  const dx = e.clientX - state.lastX;
+  const dy = e.clientY - state.lastY;
+  state.rotY += dx * 0.4;
+  state.rotX -= dy * 0.35;
+  state.rotX = Math.max(-80, Math.min(20, state.rotX));
+  state.lastX = e.clientX;
+  state.lastY = e.clientY;
+  applyTransform();
+});
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.scale *= (e.deltaY > 0 ? 0.92 : 1.08);
+  state.scale = Math.max(0.45, Math.min(1.8, state.scale));
+  applyTransform();
+}, { passive: false });
+
+function applyTransform() {
+  const stack = document.getElementById('stack');
+  stack.style.transform = `scale(${state.scale}) rotateX(${state.rotX}deg) rotateY(${state.rotY}deg)`;
+}
+
+/* ---------- Helpers ---------- */
+function makeLayer(yOffset, label, aluCountSide, colorClass) {
+  const layer = document.createElement('div');
+  layer.className = 'layer';
+  layer.style.transform = `translateY(${-yOffset}px) translateZ(0)`;
+
+  const face = document.createElement('div');
+  face.className = 'layer-face';
+  layer.appendChild(face);
+
+  const lbl = document.createElement('div');
+  lbl.className = 'layer-label';
+  lbl.textContent = label;
+  face.appendChild(lbl);
+
+  // Wires
+  for (let i = 0; i < 6; i++) {
+    const wh = document.createElement('div');
+    wh.className = 'wire-h';
+    wh.style.top = (40 + i * 48) + 'px';
+    face.appendChild(wh);
+  }
+  for (let i = 0; i < 6; i++) {
+    const wv = document.createElement('div');
+    wv.className = 'wire-v';
+    wv.style.left = (40 + i * 48) + 'px';
+    face.appendChild(wv);
+  }
+
+  // ALU grid
+  const grid = document.createElement('div');
+  grid.className = 'alu-grid';
+  const n = aluCountSide || 4;
+  grid.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${n}, 1fr)`;
+  for (let i = 0; i < n * n; i++) {
+    const alu = document.createElement('div');
+    alu.className = 'alu' + (colorClass ? ' ' + colorClass : '');
+    grid.appendChild(alu);
+    state.alus.push(alu);
+  }
+  face.appendChild(grid);
+
+  return layer;
+}
+
+function makeThrolter(yOffset) {
+  const t = document.createElement('div');
+  t.className = 'throlter';
+  t.style.transform = `translateY(${-yOffset}px)`;
+  state.throlters.push(t);
+  return t;
+}
+
+function makeTSVs(container, count, heightPx) {
+  const positions = [];
+  const step = 280 / (Math.sqrt(count) - 1 || 1);
+  let idx = 0;
+  for (let i = 0; i < Math.sqrt(count); i++) {
+    for (let j = 0; j < Math.sqrt(count); j++) {
+      if (idx >= count) break;
+      const tsv = document.createElement('div');
+      tsv.className = 'tsv';
+      const x = -140 + i * step;
+      const z = -140 + j * step;
+      tsv.style.height = heightPx + 'px';
+      tsv.style.left = '50%';
+      tsv.style.top = '50%';
+      tsv.style.marginLeft = (x - 2) + 'px';
+      tsv.style.marginTop = (-heightPx / 2) + 'px';
+      tsv.style.transform = `translateZ(${z}px)`;
+      container.appendChild(tsv);
+      positions.push({ x, z });
+      idx++;
+    }
+  }
+  return positions;
+}
+
+function makeParticles(container, tsvPos, maxY) {
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const tsv = tsvPos[Math.floor(Math.random() * tsvPos.length)] || { x: 0, z: 0 };
+    const y = Math.random() * maxY;
+    p.style.left = '50%';
+    p.style.top = '50%';
+    p.style.marginLeft = (tsv.x - 3) + 'px';
+    p.style.marginTop = (-y - 3) + 'px';
+    p.style.transform = `translateZ(${tsv.z}px)`;
+    p._data = {
+      x: tsv.x, z: tsv.z,
+      y: y,
+      dir: Math.random() > 0.45 ? 1 : -1,
+      speed: 0.6 + Math.random() * 1.2,
+      maxY
+    };
+    container.appendChild(p);
+    state.particles.push(p);
+  }
+}
+
+function buildControls(items) {
+  const box = document.getElementById('controls');
+  box.innerHTML = '';
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.id = item.id;
+    btn.textContent = item.label;
+    btn.addEventListener('click', () => {
+      item.action();
+      btn.classList.toggle('active');
+    });
+    box.appendChild(btn);
+  });
+}
+
+/* ============================================================
+   PCPU
+   ============================================================ */
+function buildPCPU(stack) {
+  document.getElementById('title-bar').innerHTML =
+    'PCPU <span>· 4-layer desktop · 16 cores · 64 ALUs · PMPW + Throlter</span>';
+
+  // Package base
+  const base = document.createElement('div');
+  base.className = 'package-base';
+  base.style.transform = 'translateY(90px)';
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      if (i > 1 && i < 6 && j > 1 && j < 6) continue;
+      const pin = document.createElement('div');
+      pin.className = 'pin';
+      pin.style.left = (20 + i * 45) + 'px';
+      pin.style.top = (20 + j * 45) + 'px';
+      base.appendChild(pin);
+    }
+  }
+  stack.appendChild(base);
+
+  const layerH = 78;
+  const gap = 28;
+  const names = [
+    'L1 · PMPW Matrix + GPU Dispatch',
+    'L2 · Linear Logic & Scripting (GTA)',
+    'L3 · Complex Structured Math (Minecraft)',
+    'L4 · Windows 11 / OS & Thread Watchdog'
+  ];
+
+  for (let L = 0; L < 4; L++) {
+    const y = 60 - L * (layerH + gap);
+    const layer = makeLayer(y, names[L], 4);
+    stack.appendChild(layer);
+    if (L < 3) {
+      const th = makeThrolter(y - (layerH / 2 + gap / 2));
+      stack.appendChild(th);
+    }
+  }
+
+  // TSVs
+  const tsvPos = [];
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      const tsv = document.createElement('div');
+      tsv.className = 'tsv';
+      const h = 4 * (layerH + gap) - gap + 40;
+      tsv.style.height = h + 'px';
+      tsv.style.left = '50%';
+      tsv.style.top = '50%';
+      tsv.style.marginLeft = (i * 90 - 2) + 'px';
+      tsv.style.marginTop = (-h / 2 + 30) + 'px';
+      tsv.style.transform = `translateZ(${j * 90}px)`;
+      stack.appendChild(tsv);
+      tsvPos.push({ x: i * 90, z: j * 90 });
+    }
+  }
+  makeParticles(stack, tsvPos, 280);
+
+  buildControls([
+    { id: 'toggleFlow', label: 'Toggle data flow', action: () => { state.options.showFlow = !state.options.showFlow; } },
+    { id: 'toggleHeat', label: 'Toggle Throlter glow', action: () => { state.options.showHeat = !state.options.showHeat; } },
+    { id: 'speed', label: 'Cycle speed ×2', action: () => { state.options.speed = state.options.speed === 1 ? 2 : 1; } }
+  ]);
+
+  document.getElementById('legend').innerHTML = `
+    <div class="row"><div class="swatch" style="background:#3fb950"></div>ALU (active compute)</div>
+    <div class="row"><div class="swatch" style="background:#58a6ff"></div>PMPW horizontal</div>
+    <div class="row"><div class="swatch" style="background:#f0b429"></div>PMPW vertical</div>
+    <div class="row"><div class="swatch" style="background:#8b5cf6"></div>Throlter (graphene)</div>
+    <div class="row"><div class="swatch" style="background:#c9d1d9"></div>TSV elevator</div>
+  `;
+
+  document.getElementById('info-panel').innerHTML = `
+    <h3>PCPU – Physics mapping from specification</h3>
+    <div class="metrics">
+      <div class="metric"><div class="k">Active layers</div><div class="v">4</div></div>
+      <div class="metric"><div class="k">Cores / ALUs</div><div class="v">16 / 64</div></div>
+      <div class="metric"><div class="k">Target clock</div><div class="v">5.0–5.2 GHz</div></div>
+      <div class="metric"><div class="k">Power envelope</div><div class="v">80–160 W</div></div>
+      <div class="metric"><div class="k">Node target</div><div class="v">2–5 nm</div></div>
+      <div class="metric"><div class="k">Cycle @5.1 GHz</div><div class="v">~196 ps</div></div>
+    </div>
+    <p><strong>Geometry.</strong> Each layer is an independent computing zone (4 cores × 4 ALUs). Vertical PMPW paths deliver binary streams into the ALU plane; horizontal paths enable same-layer ALU cross-talk without a shared bus queue. Data is asserted as continuous voltage on hardwired paths rather than packetized arbitration.</p>
+    <p><strong>Throlter sheets.</strong> Graphene nano-ribbon thermal highway sandwiched between boron-nitride electrical shields. Heat is extracted sideways to the package heat-spreader instead of accumulating vertically.</p>
+    <p><strong>TSVs.</strong> Distributed elevator shafts across the die surface (not edge-only) give every core a private high-speed path to motherboard pins and the four independent RAM channels.</p>
+  `;
+}
+
+/* ============================================================
+   PRAM
+   ============================================================ */
+function buildPRAM(stack) {
+  document.getElementById('title-bar').innerHTML =
+    'PRAM <span>· Cross-point memory · 4 096 TSV bitlines · ~4.0 ns · 3.07 TB/s</span>';
+
+  const base = document.createElement('div');
+  base.className = 'package-base';
+  base.style.transform = 'translateY(110px)';
+  base.style.background = '#1a0f0c';
+  stack.appendChild(base);
+
+  // 8 visual memory layers (representing the 8-layer 16 GB stack)
+  const layerH = 32;
+  const gap = 10;
+  for (let L = 0; L < 8; L++) {
+    const y = 70 - L * (layerH + gap);
+    const layer = document.createElement('div');
+    layer.className = 'layer';
+    layer.style.width = '300px';
+    layer.style.height = '300px';
+    layer.style.marginLeft = '-150px';
+    layer.style.marginTop = '-150px';
+    layer.style.transform = `translateY(${-y}px)`;
+    const face = document.createElement('div');
+    face.className = 'layer-face';
+    face.style.background = 'linear-gradient(145deg, #2a1a14 0%, #1a100c 100%)';
+    face.style.borderColor = '#4a3028';
+    const lbl = document.createElement('div');
+    lbl.className = 'layer-label';
+    lbl.textContent = `PRAM Layer ${L + 1} · 2 GB`;
+    lbl.style.color = '#f78166';
+    face.appendChild(lbl);
+
+    // Memory cell grid (visual stand-in for cross-point array)
+    const grid = document.createElement('div');
+    grid.style.cssText = 'position:absolute;inset:28px 16px 16px 16px;display:grid;grid-template-columns:repeat(16,1fr);grid-template-rows:repeat(12,1fr);gap:3px;';
+    for (let c = 0; c < 192; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'mem-cell';
+      grid.appendChild(cell);
+      state.alus.push(cell); // reuse pulse list
+    }
+    face.appendChild(grid);
+    layer.appendChild(face);
+    stack.appendChild(layer);
+  }
+
+  // Dense TSV forest
+  const tsvPos = [];
+  for (let i = -3; i <= 3; i++) {
+    for (let j = -3; j <= 3; j++) {
+      const tsv = document.createElement('div');
+      tsv.className = 'tsv';
+      const h = 8 * (layerH + gap) + 40;
+      tsv.style.height = h + 'px';
+      tsv.style.width = '3px';
+      tsv.style.left = '50%';
+      tsv.style.top = '50%';
+      tsv.style.marginLeft = (i * 32 - 1.5) + 'px';
+      tsv.style.marginTop = (-h / 2 + 20) + 'px';
+      tsv.style.transform = `translateZ(${j * 32}px)`;
+      tsv.style.background = 'linear-gradient(to bottom, #f78166, #8b4513)';
+      stack.appendChild(tsv);
+      tsvPos.push({ x: i * 32, z: j * 32 });
+    }
+  }
+  makeParticles(stack, tsvPos, 260);
+
+  buildControls([
+    { id: 'toggleFlow', label: 'Toggle charge flow', action: () => { state.options.showFlow = !state.options.showFlow; } },
+    { id: 'speed', label: 'Cycle speed ×2', action: () => { state.options.speed = state.options.speed === 1 ? 2 : 1; } }
+  ]);
+
+  document.getElementById('legend').innerHTML = `
+    <div class="row"><div class="swatch" style="background:#f78166"></div>Memory cell / capacitor</div>
+    <div class="row"><div class="swatch" style="background:#c9d1d9"></div>TSV bitline (vertical)</div>
+    <div class="row"><div class="swatch" style="background:#58a6ff"></div>Charge / data particle</div>
+  `;
+
+  document.getElementById('info-panel').innerHTML = `
+    <h3>PRAM – Direct voltage-coordinate memory</h3>
+    <div class="metrics">
+      <div class="metric"><div class="k">Capacity (baseline)</div><div class="v">16 GB (8 layers)</div></div>
+      <div class="metric"><div class="k">TSV bitlines</div><div class="v">4 096</div></div>
+      <div class="metric"><div class="k">Read latency</div><div class="v">~4.0 ns</div></div>
+      <div class="metric"><div class="k">Write latency</div><div class="v">~2.8 ns</div></div>
+      <div class="metric"><div class="k">Bandwidth</div><div class="v">3.07 TB/s</div></div>
+      <div class="metric"><div class="k">vs DDR5 latency</div><div class="v">~20× faster</div></div>
+    </div>
+    <p><strong>Core idea.</strong> An address is no longer a packet. It is a physical voltage applied to a specific vertical TSV and a specific horizontal row line. The 1T1C cell at the crossing connects its capacitor directly to the TSV. No command queue, no bus arbitration.</p>
+    <p><strong>Banking for 16 GB.</strong> 1 024 banks × 4 096 rows per layer keeps horizontal wire count manufacturable (~5 120 lines). Data still travels only on the 4 096 TSVs → bandwidth stays 3.07 TB/s.</p>
+    <p><strong>Visualization.</strong> 8 layers shown. Cells flash when “accessed”. Particles on the TSV forest represent continuous charge movement at the claimed bandwidth envelope.</p>
+  `;
+}
+
+/* ============================================================
+   PGPU
+   ============================================================ */
+function buildPGPU(stack) {
+  document.getElementById('title-bar').innerHTML =
+    'PGPU <span>· 16 384 ALUs · STET / DTET hybrid · 6.0 GHz · PRAM-tethered</span>';
+
+  // PRAM tether (bottom)
+  const pram = document.createElement('div');
+  pram.className = 'package-base';
+  pram.style.transform = 'translateY(130px)';
+  pram.style.background = '#1a0f0c';
+  pram.style.height = '80px';
+  pram.style.marginTop = '-40px';
+  const pramLbl = document.createElement('div');
+  pramLbl.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#f78166;';
+  pramLbl.textContent = '8 GB PRAM · 3.07 TB/s · 4 ns';
+  pram.appendChild(pramLbl);
+  stack.appendChild(pram);
+
+  const layerH = 70;
+  const gap = 22;
+  const names = [
+    'L1 · Shadow / Occlusion',
+    'L2 · Diffuse BRDF',
+    'L3 · Specular / Reflection',
+    'L4 · Denoise / Output'
+  ];
+  const dtetClasses = ['dtet-l0', 'dtet-l1', 'dtet-l2', 'dtet-l3'];
+
+  for (let L = 0; L < 4; L++) {
+    const y = 50 - L * (layerH + gap);
+    const layer = makeLayer(y, names[L], 6, state.options.stetMode ? 'stet' : dtetClasses[L]);
+    // Override ALU classes for later mode switch
+    layer.querySelectorAll('.alu').forEach(alu => {
+      alu.dataset.layer = L;
+    });
+    stack.appendChild(layer);
+  }
+
+  // TSVs from PRAM
+  const tsvPos = [];
+  for (let i = -2; i <= 2; i++) {
+    for (let j = -2; j <= 2; j++) {
+      const tsv = document.createElement('div');
+      tsv.className = 'tsv';
+      const h = 4 * (layerH + gap) + 80;
+      tsv.style.height = h + 'px';
+      tsv.style.left = '50%';
+      tsv.style.top = '50%';
+      tsv.style.marginLeft = (i * 55 - 2) + 'px';
+      tsv.style.marginTop = (-h / 2 + 40) + 'px';
+      tsv.style.transform = `translateZ(${j * 55}px)`;
+      stack.appendChild(tsv);
+      tsvPos.push({ x: i * 55, z: j * 55 });
+    }
+  }
+  makeParticles(stack, tsvPos, 300);
+
+  buildControls([
+    { id: 'modeSTET', label: 'STET mode (uniform)', action: () => { state.options.stetMode = true; applyPGPUMode(); } },
+    { id: 'modeDTET', label: 'DTET mode (divergent)', action: () => { state.options.stetMode = false; applyPGPUMode(); } },
+    { id: 'toggleFlow', label: 'Toggle data flow', action: () => { state.options.showFlow = !state.options.showFlow; } },
+    { id: 'speed', label: 'Cycle speed ×2', action: () => { state.options.speed = state.options.speed === 1 ? 2 : 1; } }
+  ]);
+
+  document.getElementById('legend').innerHTML = `
+    <div class="row"><div class="swatch" style="background:#d2a8ff"></div>ALU STET (same instruction)</div>
+    <div class="row"><div class="swatch" style="background:#3fb950"></div>L1 DTET – shadow</div>
+    <div class="row"><div class="swatch" style="background:#58a6ff"></div>L2 DTET – diffuse</div>
+    <div class="row"><div class="swatch" style="background:#f0b429"></div>L3 DTET – specular</div>
+    <div class="row"><div class="swatch" style="background:#f78166"></div>L4 DTET – denoise</div>
+  `;
+
+  document.getElementById('info-panel').innerHTML = `
+    <h3>PGPU – Physical solution to warp divergence</h3>
+    <div class="metrics">
+      <div class="metric"><div class="k">Total ALUs</div><div class="v">16 384</div></div>
+      <div class="metric"><div class="k">ALUs / layer</div><div class="v">4 096</div></div>
+      <div class="metric"><div class="k">Clock</div><div class="v">6.0 GHz (166 ps)</div></div>
+      <div class="metric"><div class="k">PRAM tether</div><div class="v">3.07 TB/s · 4 ns</div></div>
+      <div class="metric"><div class="k">Power (core)</div><div class="v">~300 W</div></div>
+      <div class="metric"><div class="k">Triangle setup (STET)</div><div class="v">~98 B / s</div></div>
+    </div>
+    <p><strong>STET.</strong> One global instruction on the horizontal PMPW street. All 16 384 ALUs execute the identical opcode on the same 166 ps edge. Ideal for uniform vertex work and matrix multiplies.</p>
+    <p><strong>DTET.</strong> Each of the four physical layers has its own local instruction decoder and program counter. Layer 1 can test shadows while Layer 2 evaluates BRDFs, Layer 3 traces reflections and Layer 4 denoises — all on the same clock edge. No warp-wide serialization.</p>
+    <p><strong>Visualization limit.</strong> 6×6 ALUs drawn per layer (stand-in for 4 096). Use the STET / DTET buttons to switch the colouring that illustrates uniform versus layer-isolated execution.</p>
+  `;
+
+  applyPGPUMode();
+}
+
+function applyPGPUMode() {
+  const classes = ['dtet-l0', 'dtet-l1', 'dtet-l2', 'dtet-l3'];
+  state.alus.forEach(alu => {
+    alu.classList.remove('stet', 'dtet-l0', 'dtet-l1', 'dtet-l2', 'dtet-l3');
+    if (state.options.stetMode) {
+      alu.classList.add('stet');
+    } else {
+      const L = parseInt(alu.dataset.layer || '0', 10);
+      alu.classList.add(classes[L] || 'dtet-l0');
+    }
+  });
+}
+
+/* ---------- Animation ---------- */
+function animate() {
+  state.animId = requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = (now - state.lastT) / 1000;
+  state.lastT = now;
+  const spd = state.options.speed;
+
+  // Cycles & data
+  let ghz = 5.1;
+  if (state.mode === 'pgpu' || state.mode === 'pram') ghz = 6.0;
+  state.cycleCount += Math.floor(ghz * 1e6 * dt * 0.0008 * spd);
+  let bw = 0.3;
+  if (state.mode === 'pram' || state.mode === 'pgpu') bw = 3.07;
+  state.dataMovedGB += bw * dt * spd * 0.12;
+
+  // ALU / cell pulse
+  const t = now * 0.001 * spd;
+  state.alus.forEach((el, i) => {
+    const phase = (t * 6 + i * 0.2) % (Math.PI * 2);
+    const on = Math.sin(phase) > 0.3;
+    el.classList.toggle('pulse', on);
+    if (el.classList.contains('mem-cell')) {
+      el.classList.toggle('active', on);
+    }
+  });
+
+  // Particles
+  state.particles.forEach(p => {
+    if (!state.options.showFlow) {
+      p.style.opacity = '0';
+      return;
+    }
+    p.style.opacity = '1';
+    const d = p._data;
+    d.y += d.dir * d.speed * spd * 1.8;
+    if (d.y > d.maxY) { d.y = 0; d.dir = 1; }
+    if (d.y < 0) { d.y = d.maxY; d.dir = -1; }
+    p.style.marginTop = (-d.y - 3) + 'px';
+  });
+
+  // Throlter glow
+  state.throlters.forEach(th => {
+    th.classList.toggle('glow', state.options.showHeat && Math.sin(t * 2.5) > 0);
+  });
+
+  updateLiveProof();
+}
+
+function updateLiveProof() {
+  const el = document.getElementById('live-proof');
+  if (!el || !state.mode) return;
+  let modeNote = '—', bwClaim = '—', latClaim = '—';
+  if (state.mode === 'pcpu') {
+    modeNote = 'PMPW continuous paths';
+    bwClaim = 'TSV + on-layer matrix';
+    latClaim = '~196 ps @ 5.1 GHz';
+  } else if (state.mode === 'pram') {
+    modeNote = 'Voltage-coordinate';
+    bwClaim = '3.07 TB/s (4 096 TSVs)';
+    latClaim = '~4.0 ns (16 GB)';
+  } else if (state.mode === 'pgpu') {
+    modeNote = state.options.stetMode ? 'STET (uniform)' : 'DTET (layer-isolated)';
+    bwClaim = '3.07 TB/s PRAM tether';
+    latClaim = '166 ps @ 6.0 GHz';
+  }
+  const activity = 85 + 12 * Math.sin(performance.now() * 0.002);
+  el.innerHTML = `
+    <div class="title">Live proof (visual scale)</div>
+    <div class="row"><span>Simulated cycles</span><span class="val">${state.cycleCount.toLocaleString()}</span></div>
+    <div class="row"><span>Data moved (GB)</span><span class="val">${state.dataMovedGB.toFixed(2)}</span></div>
+    <div class="row"><span>ALU / cell activity</span><span class="val ok">${activity.toFixed(1)}%</span></div>
+    <div class="row"><span>Mode</span><span class="val hot">${modeNote}</span></div>
+    <div class="row"><span>Claimed BW</span><span class="val">${bwClaim}</span></div>
+    <div class="row"><span>Claimed latency</span><span class="val">${latClaim}</span></div>
+  `;
+}
+</script>
+</body>
+</html>

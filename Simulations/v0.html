@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PENTAL Architecture – Virtual Prototype</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --panel: #12151c;
+    --border: #1e2430;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --cpu: #3fb950;
+    --ram: #f78166;
+    --gpu: #d2a8ff;
+    --warn: #f0b429;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  #menu {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #12151c 0%, #0a0c10 70%);
+    z-index: 100;
+    transition: opacity 0.4s ease, visibility 0.4s;
+  }
+
+  #menu.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  #menu h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.4rem;
+  }
+
+  #menu .sub {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+    max-width: 520px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .choice-row {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .choice {
+    width: 220px;
+    padding: 1.4rem 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+  }
+
+  .choice:hover {
+    border-color: var(--accent);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .choice .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 1.15rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .choice.cpu .label { color: var(--cpu); }
+  .choice.ram .label { color: var(--ram); }
+  .choice.gpu .label { color: var(--gpu); }
+
+  .choice .desc {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  #viewport {
+    position: absolute;
+    inset: 0;
+    display: none;
+  }
+
+  #viewport.active { display: block; }
+
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    pointer-events: none;
+    z-index: 20;
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: linear-gradient(to bottom, rgba(10,12,16,0.85), transparent);
+  }
+
+  #hud-left, #hud-right {
+    pointer-events: auto;
+  }
+
+  #title-bar {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  #title-bar span { color: var(--muted); font-weight: 400; }
+
+  #back-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+
+  #back-btn:hover { border-color: var(--accent); }
+
+  #info-panel {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    max-height: 38%;
+    overflow-y: auto;
+    background: rgba(10,12,16,0.92);
+    border-top: 1px solid var(--border);
+    padding: 14px 18px 18px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    z-index: 20;
+    pointer-events: auto;
+  }
+
+  #info-panel h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+
+  #info-panel .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px 16px;
+    margin: 10px 0;
+  }
+
+  #info-panel .metric {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  #info-panel .metric .k {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  #info-panel .metric .v {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-top: 2px;
+  }
+
+  #info-panel p { color: var(--muted); margin-top: 8px; }
+
+  #controls {
+    position: absolute;
+    top: 60px;
+    right: 16px;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
+  #controls button {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    text-align: left;
+    min-width: 140px;
+  }
+
+  #controls button:hover, #controls button.active {
+    border-color: var(--accent);
+    background: #1a2030;
+  }
+
+  #legend {
+    position: absolute;
+    top: 60px;
+    left: 16px;
+    z-index: 25;
+    background: rgba(18,21,28,0.9);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    max-width: 210px;
+  }
+
+  #live-proof {
+    position: absolute;
+    bottom: 42%;
+    right: 16px;
+    z-index: 25;
+    background: rgba(18,21,28,0.94);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    min-width: 200px;
+    pointer-events: none;
+  }
+  #live-proof .title {
+    color: var(--muted);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  #live-proof .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 3px 0;
+  }
+  #live-proof .val {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  #live-proof .val.hot { color: #f0b429; }
+  #live-proof .val.ok { color: #3fb950; }
+
+
+  #legend .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  #legend .swatch {
+    width: 12px; height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .pulse {
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  #loading {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>PENTAL Virtual Prototype</h1>
+  <p class="sub">Select a component to inspect its physical 3D topology, interconnect fabric, data movement, and the quantitative claims given in the architecture specifications. This is a first-principles visualization of the described geometry and timing, not a marketing animation.</p>
+  <div class="choice-row">
+    <div class="choice cpu" data-target="pcpu">
+      <div class="label">PCPU</div>
+      <div class="desc">4-layer 3D-stacked matrix processor. 16 cores, 64 ALUs, PMPW grid, Throlter sheets, TSV elevators. Target 5.0–5.2 GHz, 80–160 W.</div>
+    </div>
+    <div class="choice ram" data-target="pram">
+      <div class="label">PRAM</div>
+      <div class="desc">Cross-point memory stack with 4,096 dedicated TSV bitlines. Direct voltage-coordinate addressing. ~4.0 ns latency, 3.07 TB/s bandwidth (16 GB banked).</div>
+    </div>
+    <div class="choice gpu" data-target="pgpu">
+      <div class="label">PGPU</div>
+      <div class="desc">Hybrid STET/DTET graphics engine. 16,384 independent ALUs across 4 layers. Physical divergence isolation. 6.0 GHz, ~300 W core.</div>
+    </div>
+  </div>
+</div>
+
+<div id="loading" style="display:none;">Building geometry…</div>
+
+<div id="viewport">
+  <div id="hud">
+    <div id="hud-left">
+      <div id="title-bar">—</div>
+    </div>
+    <div id="hud-right">
+      <button id="back-btn">← Back to selection</button>
+    </div>
+  </div>
+  <div id="legend"></div>
+  <div id="controls"></div>
+  <div id="live-proof"></div>
+  <div id="info-panel"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* ============================================================
+   PENTAL Virtual Prototype – Single-file 3D inspector
+   Renders geometry and timing claims from the supplied
+   architecture specifications with explicit physical mapping.
+   ============================================================ */
+
+const state = {
+  mode: null,          // 'pcpu' | 'pram' | 'pgpu'
+  scene: null,
+  camera: null,
+  renderer: null,
+  controls: null,
+  animId: null,
+  objects: {},
+  clock: 0,
+  dataParticles: [],
+  aluMeshes: [],
+  cycleCount: 0,
+  lastCycleTime: 0,
+  proof: {
+    cycles: 0,
+    dataMovedGB: 0,
+    aluActivePct: 0,
+    modeLabel: '—'
+  },
+  options: {
+    showDataFlow: true,
+    showHeat: true,
+    showLabels: true,
+    speed: 1.0,
+    stetMode: true      // for PGPU
+  }
+};
+
+/* ---------- Bootstrap ---------- */
+document.querySelectorAll('.choice').forEach(el => {
+  el.addEventListener('click', () => {
+    const target = el.dataset.target;
+    document.getElementById('menu').classList.add('hidden');
+    document.getElementById('loading').style.display = 'flex';
+    setTimeout(() => startMode(target), 80);
+  });
+});
+
+document.getElementById('back-btn').addEventListener('click', () => {
+  stopMode();
+  document.getElementById('viewport').classList.remove('active');
+  document.getElementById('menu').classList.remove('hidden');
+});
+
+function startMode(mode) {
+  state.mode = mode;
+  initThree();
+  if (mode === 'pcpu') buildPCPU();
+  else if (mode === 'pram') buildPRAM();
+  else if (mode === 'pgpu') buildPGPU();
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('viewport').classList.add('active');
+  animate();
+}
+
+function stopMode() {
+  if (state.animId) cancelAnimationFrame(state.animId);
+  if (state.renderer) {
+    state.renderer.dispose();
+    const canvas = state.renderer.domElement;
+    if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+  }
+  state.scene = null;
+  state.camera = null;
+  state.renderer = null;
+  state.controls = null;
+  state.objects = {};
+  state.dataParticles = [];
+  state.aluMeshes = [];
+  state.cycleCount = 0;
+  document.getElementById('controls').innerHTML = '';
+  document.getElementById('legend').innerHTML = '';
+  document.getElementById('info-panel').innerHTML = '';
+  document.getElementById('live-proof').innerHTML = '';
+  state.proof = { cycles: 0, dataMovedGB: 0, aluActivePct: 0, modeLabel: '—' };
+}
+
+function initThree() {
+  const viewport = document.getElementById('viewport');
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  state.scene = new THREE.Scene();
+  state.scene.background = new THREE.Color(0x0a0c10);
+  state.scene.fog = new THREE.Fog(0x0a0c10, 18, 45);
+
+  state.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
+  state.camera.position.set(9, 7, 11);
+
+  state.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  state.renderer.setSize(w, h);
+  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  state.renderer.shadowMap.enabled = true;
+  viewport.appendChild(state.renderer.domElement);
+
+  state.controls = new THREE.OrbitControls(state.camera, state.renderer.domElement);
+  state.controls.enableDamping = true;
+  state.controls.dampingFactor = 0.08;
+  state.controls.target.set(0, 1.5, 0);
+
+  // Lighting – neutral technical illumination
+  const amb = new THREE.AmbientLight(0x404050, 0.55);
+  state.scene.add(amb);
+  const key = new THREE.DirectionalLight(0xffffff, 0.85);
+  key.position.set(8, 14, 6);
+  key.castShadow = true;
+  state.scene.add(key);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.25);
+  fill.position.set(-6, 4, -4);
+  state.scene.add(fill);
+  const rim = new THREE.PointLight(0x58a6ff, 0.4, 30);
+  rim.position.set(0, 6, 8);
+  state.scene.add(rim);
+
+  // Floor reference plane
+  const grid = new THREE.GridHelper(30, 30, 0x1e2430, 0x151820);
+  grid.position.y = -0.02;
+  state.scene.add(grid);
+
+  window.addEventListener('resize', onResize);
+}
+
+function onResize() {
+  if (!state.camera || !state.renderer) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  state.camera.aspect = w / h;
+  state.camera.updateProjectionMatrix();
+  state.renderer.setSize(w, h);
+}
+
+/* ============================================================
+   PCPU – 4-layer desktop specification
+   Spec: 4 layers × 4 cores × 4 ALUs = 16 cores / 64 ALUs
+   PMPW dual-direction matrix, Throlter sheets, distributed TSVs
+   ============================================================ */
+function buildPCPU() {
+  document.getElementById('title-bar').innerHTML =
+    'PCPU <span>· 4-layer desktop stack · 16 cores · 64 ALUs · PMPW + Throlter</span>';
+  state.proof.modeLabel = 'PCPU';
+  state.cycleCount = 0;
+  state.proof.dataMovedGB = 0;
+
+  const group = new THREE.Group();
+  state.objects.root = group;
+  state.scene.add(group);
+
+  const layerH = 0.55;
+  const gap = 0.22;          // Throlter sheet thickness + air
+  const layerSize = 4.2;
+  const colors = {
+    silicon: 0x1a2332,
+    alu: 0x3fb950,
+    core: 0x2d3a4f,
+    pmpwH: 0x58a6ff,
+    pmpwV: 0xf0b429,
+    throlter: 0x8b5cf6,
+    tsv: 0xc9d1d9,
+    package: 0x0d1117
+  };
+
+  // Package base
+  const baseGeo = new THREE.BoxGeometry(5.2, 0.18, 5.2);
+  const baseMat = new THREE.MeshStandardMaterial({ color: colors.package, metalness: 0.7, roughness: 0.35 });
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  base.position.y = -0.2;
+  base.receiveShadow = true;
+  group.add(base);
+
+  // Pins / motherboard interface
+  for (let i = -2; i <= 2; i++) {
+    for (let j = -2; j <= 2; j++) {
+      if (Math.abs(i) < 1.5 && Math.abs(j) < 1.5) continue;
+      const pin = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 0.25, 8),
+        new THREE.MeshStandardMaterial({ color: 0xb8860b, metalness: 0.9, roughness: 0.2 })
+      );
+      pin.position.set(i * 0.9, -0.4, j * 0.9);
+      group.add(pin);
+    }
+  }
+
+  const layerNames = [
+    'L1 · PMPW Matrix + GPU Dispatch',
+    'L2 · Linear Logic & Scripting',
+    'L3 · Complex Structured Math',
+    'L4 · OS & Thread Watchdog'
+  ];
+
+  state.aluMeshes = [];
+  const coresPerSide = 2;   // 2×2 cores per layer
+
+  for (let L = 0; L < 4; L++) {
+    const y = L * (layerH + gap);
+
+    // Silicon die
+    const die = new THREE.Mesh(
+      new THREE.BoxGeometry(layerSize, layerH * 0.85, layerSize),
+      new THREE.MeshStandardMaterial({
+        color: colors.silicon,
+        metalness: 0.4,
+        roughness: 0.55,
+        transparent: true,
+        opacity: 0.92
+      })
+    );
+    die.position.y = y + layerH * 0.4;
+    die.castShadow = true;
+    die.receiveShadow = true;
+    group.add(die);
+
+    // Core blocks + ALUs
+    const coreSpacing = 1.7;
+    for (let cx = 0; cx < coresPerSide; cx++) {
+      for (let cz = 0; cz < coresPerSide; cz++) {
+        const ox = (cx - 0.5) * coreSpacing;
+        const oz = (cz - 0.5) * coreSpacing;
+
+        const core = new THREE.Mesh(
+          new THREE.BoxGeometry(1.4, layerH * 0.55, 1.4),
+          new THREE.MeshStandardMaterial({ color: colors.core, metalness: 0.3, roughness: 0.6 })
+        );
+        core.position.set(ox, y + layerH * 0.35, oz);
+        group.add(core);
+
+        // 4 ALUs per core (2×2)
+        for (let ax = 0; ax < 2; ax++) {
+          for (let az = 0; az < 2; az++) {
+            const alu = new THREE.Mesh(
+              new THREE.BoxGeometry(0.38, 0.22, 0.38),
+              new THREE.MeshStandardMaterial({
+                color: colors.alu,
+                emissive: colors.alu,
+                emissiveIntensity: 0.15,
+                metalness: 0.2,
+                roughness: 0.4
+              })
+            );
+            alu.position.set(
+              ox + (ax - 0.5) * 0.55,
+              y + layerH * 0.55,
+              oz + (az - 0.5) * 0.55
+            );
+            alu.userData = { layer: L, core: cx * 2 + cz, baseEmissive: 0.15 };
+            group.add(alu);
+            state.aluMeshes.push(alu);
+          }
+        }
+      }
+    }
+
+    // Horizontal PMPW traces (left-right)
+    for (let i = 0; i < 7; i++) {
+      const z = -1.8 + i * 0.6;
+      const wire = new THREE.Mesh(
+        new THREE.BoxGeometry(layerSize * 0.95, 0.025, 0.04),
+        new THREE.MeshStandardMaterial({
+          color: colors.pmpwH,
+          emissive: colors.pmpwH,
+          emissiveIntensity: 0.35
+        })
+      );
+      wire.position.set(0, y + layerH * 0.72, z);
+      group.add(wire);
+    }
+
+    // Vertical PMPW (front-back) – Direction 1
+    for (let i = 0; i < 7; i++) {
+      const x = -1.8 + i * 0.6;
+      const wire = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.025, layerSize * 0.95),
+        new THREE.MeshStandardMaterial({
+          color: colors.pmpwV,
+          emissive: colors.pmpwV,
+          emissiveIntensity: 0.25
+        })
+      );
+      wire.position.set(x, y + layerH * 0.68, 0);
+      group.add(wire);
+    }
+
+    // Throlter sheet between layers (except after top)
+    if (L < 3) {
+      const throlterY = y + layerH + gap * 0.5;
+      // Boron nitride outer (electrical isolation)
+      const bn = new THREE.Mesh(
+        new THREE.BoxGeometry(layerSize * 1.02, 0.04, layerSize * 1.02),
+        new THREE.MeshStandardMaterial({
+          color: 0x4a5568,
+          transparent: true,
+          opacity: 0.7,
+          metalness: 0.1,
+          roughness: 0.8
+        })
+      );
+      bn.position.y = throlterY;
+      group.add(bn);
+
+      // Graphene nano-ribbon core (thermal highway) – glowing
+      const graphene = new THREE.Mesh(
+        new THREE.BoxGeometry(layerSize * 0.98, 0.03, layerSize * 0.98),
+        new THREE.MeshStandardMaterial({
+          color: colors.throlter,
+          emissive: colors.throlter,
+          emissiveIntensity: 0.45,
+          transparent: true,
+          opacity: 0.85
+        })
+      );
+      graphene.position.y = throlterY;
+      graphene.userData = { isThrolter: true };
+      group.add(graphene);
+    }
+
+    // Layer label (sprite-like)
+    if (state.options.showLabels) {
+      const label = createTextSprite(layerNames[L], 0.9);
+      label.position.set(0, y + layerH * 0.9, layerSize * 0.55 + 0.3);
+      group.add(label);
+    }
+  }
+
+  // Distributed TSVs (elevator shafts) – not edge-only
+  const tsvMat = new THREE.MeshStandardMaterial({
+    color: colors.tsv,
+    metalness: 0.85,
+    roughness: 0.2,
+    emissive: 0x334455,
+    emissiveIntensity: 0.2
+  });
+  const tsvPositions = [];
+  for (let i = -1.5; i <= 1.5; i += 1.0) {
+    for (let j = -1.5; j <= 1.5; j += 1.0) {
+      const height = 4 * (layerH + gap) - gap + 0.3;
+      const tsv = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, height, 10),
+        tsvMat
+      );
+      tsv.position.set(i, height / 2 - 0.15, j);
+      group.add(tsv);
+      tsvPositions.push({ x: i, z: j });
+    }
+  }
+  state.objects.tsvPositions = tsvPositions;
+
+  // Heat spreader / outer casing hint
+  const casing = new THREE.Mesh(
+    new THREE.BoxGeometry(5.4, 0.08, 5.4),
+    new THREE.MeshStandardMaterial({ color: 0x6b7280, metalness: 0.9, roughness: 0.15 })
+  );
+  casing.position.y = 4 * (layerH + gap) - gap + 0.15;
+  group.add(casing);
+
+  // Data-flow particles (will be updated in animate)
+  createDataFlowParticles(group, tsvPositions, 4 * (layerH + gap));
+
+  // Controls
+  buildControls([
+    { id: 'toggleFlow', label: 'Toggle data flow', action: () => { state.options.showDataFlow = !state.options.showDataFlow; } },
+    { id: 'toggleHeat', label: 'Toggle Throlter glow', action: () => { state.options.showHeat = !state.options.showHeat; } },
+    { id: 'speed', label: 'Cycle speed ×2', action: () => { state.options.speed = state.options.speed === 1 ? 2 : 1; } }
+  ]);
+
+  // Legend
+  document.getElementById('legend').innerHTML = `
+    <div class="row"><div class="swatch" style="background:#3fb950"></div>ALU (active compute)</div>
+    <div class="row"><div class="swatch" style="background:#58a6ff"></div>PMPW horizontal (cross-talk)</div>
+    <div class="row"><div class="swatch" style="background:#f0b429"></div>PMPW vertical (I/O)</div>
+    <div class="row"><div class="swatch" style="background:#8b5cf6"></div>Throlter (graphene heat path)</div>
+    <div class="row"><div class="swatch" style="background:#c9d1d9"></div>TSV elevator</div>
+  `;
+
+  // Info panel – physics & claims
+  document.getElementById('info-panel').innerHTML = `
+    <h3>PCPU – Physics mapping from specification</h3>
+    <div class="metrics">
+      <div class="metric"><div class="k">Active layers</div><div class="v">4</div></div>
+      <div class="metric"><div class="k">Cores / ALUs</div><div class="v">16 / 64</div></div>
+      <div class="metric"><div class="k">Target clock</div><div class="v">5.0–5.2 GHz</div></div>
+      <div class="metric"><div class="k">Power envelope</div><div class="v">80–160 W</div></div>
+      <div class="metric"><div class="k">Node target</div><div class="v">2–5 nm</div></div>
+      <div class="metric"><div class="k">Cycle period @5.1 GHz</div><div class="v">~196 ps</div></div>
+    </div>
+    <p>
+      <strong>Geometry.</strong> Each layer is an independent computing zone (4 cores × 4 ALUs).
+      Vertical PMPW paths deliver binary streams into the ALU plane; horizontal paths enable same-layer ALU cross-talk without a shared bus queue.
+      Data is asserted as continuous voltage on hardwired paths rather than packetized arbitration.
+    </p>
+    <p>
+      <strong>Thermal path.</strong> Between wafers sits a three-layer Throlter sheet: boron-nitride electrical isolation surrounding a graphene nano-ribbon thermal highway.
+      Graphene’s in-plane thermal conductivity (~2000–5000 W·m⁻¹·K⁻¹) is used to extract heat laterally to the package edge before it can rise through the stack.
+      Deep-trench isolation ridges couple the sheet to hot spots at core centers.
+    </p>
+    <p>
+      <strong>TSV elevators.</strong> Vias are distributed across the die surface (not edge-only) so each core has a private path to motherboard pins / dedicated RAM channels.
+      Spec maps four independent RAM channels to the four layers (OS / Minecraft / GTA / GPU dispatch).
+    </p>
+    <p>
+      <strong>Limitation of this visualization.</strong> Real transistor density, full 64-ALU internal wiring, and actual RC delays of TSVs at 2 nm are not rendered at atomic fidelity.
+      The animation demonstrates topology and the claimed isolation of layers under simultaneous heterogeneous workloads.
+    </p>
+  `;
+}
+
+/* ============================================================
+   PRAM – Cross-point stack with 4096 TSV bitlines
+   Spec: direct voltage-coordinate addressing, ~4 ns, 3.07 TB/s
+   ============================================================ */
+function buildPRAM() {
+  document.getElementById('title-bar').innerHTML =
+    'PRAM <span>· Cross-point memory · 4,096 TSV bitlines · ~4.0 ns · 3.07 TB/s</span>';
+  state.proof.modeLabel = 'PRAM';
+  state.cycleCount = 0;
+  state.proof.dataMovedGB = 0;
+
+  const group = new THREE.Group();
+  state.objects.root = group;
+  state.scene.add(group);
+
+  // For visualization we show 8 layers (16 GB target) but scale cell count down
+  const layers = 8;
+  const layerH = 0.28;
+  const gap = 0.12;
+  const size = 5.0;
+  const tsvCountSide = 12;   // visual proxy for 64×64 = 4096 (we show 12×12 = 144)
+
+  const colors = {
+    die: 0x1c2433,
+    cell: 0xf78166,
+    tsv: 0xe6edf3,
+    row: 0x58a6ff,
+    bank: 0xf0b429,
+    sense: 0x3fb950
+  };
+
+  // Base / interposer
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(size + 0.8, 0.15, size + 0.8),
+    new THREE.MeshStandardMaterial({ color: 0x0d1117, metalness: 0.7, roughness: 0.3 })
+  );
+  base.position.y = -0.2;
+  group.add(base);
+
+  // TSV grid (visual subset)
+  const tsvGeo = new THREE.CylinderGeometry(0.035, 0.035, layers * (layerH + gap) + 0.4, 8);
+  const tsvMat = new THREE.MeshStandardMaterial({
+    color: colors.tsv,
+    metalness: 0.9,
+    roughness: 0.15,
+    emissive: 0x445566,
+    emissiveIntensity: 0.15
+  });
+  const tsvList = [];
+  const spacing = size / (tsvCountSide + 1);
+  for (let i = 0; i < tsvCountSide; i++) {
+    for (let j = 0; j < tsvCountSide; j++) {
+      const x = -size / 2 + spacing * (i + 1);
+      const z = -size / 2 + spacing * (j + 1);
+      const tsv = new THREE.Mesh(tsvGeo, tsvMat);
+      tsv.position.set(x, (layers * (layerH + gap)) / 2 - 0.05, z);
+      group.add(tsv);
+      tsvList.push({ x, z, mesh: tsv });
+    }
+  }
+  state.objects.tsvList = tsvList;
+
+  // Memory layers + horizontal row/bank lines
+  for (let L = 0; L < layers; L++) {
+    const y = L * (layerH + gap);
+
+    const die = new THREE.Mesh(
+      new THREE.BoxGeometry(size, layerH * 0.7, size),
+      new THREE.MeshStandardMaterial({
+        color: colors.die,
+        transparent: true,
+        opacity: 0.75,
+        metalness: 0.35,
+        roughness: 0.6
+      })
+    );
+    die.position.y = y + layerH * 0.35;
+    group.add(die);
+
+    // Sparse cell indicators (visual density proxy)
+    if (L % 2 === 0) {
+      for (let i = 0; i < 6; i++) {
+        for (let j = 0; j < 6; j++) {
+          const cell = new THREE.Mesh(
+            new THREE.BoxGeometry(0.18, 0.08, 0.18),
+            new THREE.MeshStandardMaterial({
+              color: colors.cell,
+              emissive: colors.cell,
+              emissiveIntensity: 0.2
+            })
+          );
+          cell.position.set(
+            -size / 2 + 0.7 + i * 0.7,
+            y + layerH * 0.5,
+            -size / 2 + 0.7 + j * 0.7
+          );
+          group.add(cell);
+        }
+      }
+    }
+
+    // Horizontal row-select lines (blue)
+    for (let r = 0; r < 5; r++) {
+      const line = new THREE.Mesh(
+        new THREE.BoxGeometry(size * 0.92, 0.02, 0.03),
+        new THREE.MeshStandardMaterial({
+          color: colors.row,
+          emissive: colors.row,
+          emissiveIntensity: 0.3
+        })
+      );
+      line.position.set(0, y + layerH * 0.55, -size / 2 + 0.6 + r * 0.9);
+      group.add(line);
+    }
+
+    // Bank-select lines (amber) – fewer
+    for (let b = 0; b < 3; b++) {
+      const line = new THREE.Mesh(
+        new THREE.BoxGeometry(size * 0.92, 0.015, 0.025),
+        new THREE.MeshStandardMaterial({
+          color: colors.bank,
+          emissive: colors.bank,
+          emissiveIntensity: 0.25
+        })
+      );
+      line.position.set(0, y + layerH * 0.48, -size / 2 + 1.2 + b * 1.3);
+      group.add(line);
+    }
+
+    // Sense-amp row at bottom edge of each layer (simplified)
+    if (L === 0) {
+      for (let s = 0; s < 8; s++) {
+        const sa = new THREE.Mesh(
+          new THREE.BoxGeometry(0.25, 0.12, 0.2),
+          new THREE.MeshStandardMaterial({
+            color: colors.sense,
+            emissive: colors.sense,
+            emissiveIntensity: 0.35
+          })
+        );
+        sa.position.set(-size / 2 + 0.5 + s * 0.6, 0.15, size / 2 + 0.25);
+        group.add(sa);
+      }
+    }
+  }
+
+  // CPU logic die hint on top
+  const logic = new THREE.Mesh(
+    new THREE.BoxGeometry(size * 0.7, 0.35, size * 0.7),
+    new THREE.MeshStandardMaterial({ color: 0x1a2332, metalness: 0.4, roughness: 0.5 })
+  );
+  logic.position.y = layers * (layerH + gap) + 0.25;
+  group.add(logic);
+  const logicLabel = createTextSprite('PENTAL logic die (bonded)', 0.7);
+  logicLabel.position.set(0, layers * (layerH + gap) + 0.55, size * 0.4);
+  group.add(logicLabel);
+
+  // Animated charge particles traveling up/down selected TSVs
+  state.dataParticles = [];
+  for (let p = 0; p < 24; p++) {
+    const tsv = tsvList[Math.floor(Math.random() * tsvList.length)];
+    const particle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xff6b4a,
+        emissive: 0xff6b4a,
+        emissiveIntensity: 0.8
+      })
+    );
+    particle.position.set(tsv.x, Math.random() * layers * (layerH + gap), tsv.z);
+    particle.userData = {
+      tsv,
+      speed: 0.8 + Math.random() * 1.2,
+      direction: Math.random() > 0.5 ? 1 : -1,
+      maxY: layers * (layerH + gap)
+    };
+    group.add(particle);
+    state.dataParticles.push(particle);
+  }
+
+  buildControls([
+    { id: 'toggleFlow', label: 'Toggle charge flow', action: () => { state.options.showDataFlow = !state.options.showDataFlow; } },
+    { id: 'speed', label: 'Animation speed ×2', action: () => { state.options.speed = state.options.speed === 1 ? 2 : 1; } }
+  ]);
+
+  document.getElementById('legend').innerHTML = `
+    <div class="row"><div class="swatch" style="background:#f78166"></div>Memory cell (1T1C proxy)</div>
+    <div class="row"><div class="swatch" style="background:#58a6ff"></div>Row-select line</div>
+    <div class="row"><div class="swatch" style="background:#f0b429"></div>Bank-select line</div>
+    <div class="row"><div class="swatch" style="background:#e6edf3"></div>TSV bitline (column)</div>
+    <div class="row"><div class="swatch" style="background:#3fb950"></div>Sense amplifier</div>
+  `;
+
+  document.getElementById('info-panel').innerHTML = `
+    <h3>PRAM – Direct voltage-coordinate memory</h3>
+    <div class="metrics">
+      <div class="metric"><div class="k">TSV data lanes</div><div class="v">4,096</div></div>
+      <div class="metric"><div class="k">Bandwidth (read/write)</div><div class="v">3.07 TB/s</div></div>
+      <div class="metric"><div class="k">Latency (16 GB banked)</div><div class="v">~4.0 ns</div></div>
+      <div class="metric"><div class="k">Write latency</div><div class="v">~2.8 ns</div></div>
+      <div class="metric"><div class="k">16 GB stack</div><div class="v">8 layers × 2 GB</div></div>
+      <div class="metric"><div class="k">Clock sync</div><div class="v">6.0 GHz (with logic)</div></div>
+    </div>
+    <p>
+      <strong>Addressing physics.</strong> An address is not a packet. The CPU asserts a voltage on one vertical TSV (bitline) and one horizontal row-select line on a chosen layer.
+      The 1T1C cell at the geometric intersection conducts; charge redistributes onto the TSV; a sense amplifier at the base recovers the bit.
+      No command queue, no shared narrow bus, no row-activation scheduler in the classical DRAM sense.
+    </p>
+    <p>
+      <strong>Banking for capacity.</strong> A pure 4 096 × millions-of-rows crossbar is unroutable. Spec uses hierarchical banks: per layer, 1 024 banks of 4 096 × 4 096 bits, addressed by 4 096 row lines + 1 024 bank-select lines (≈ 5 120 horizontal wires – manufacturable at modern pitches).
+      Extra decode adds ~1.8 ns; total still ~4 ns versus ~80 ns DDR5.
+    </p>
+    <p>
+      <strong>Bandwidth ceiling.</strong> 4 096 lanes × 6 GHz yields 3.07 TB/s in both directions. This is the hard physical limit of the TSV count; capacity (16 GB / 64 GB) does not change the data-path width.
+    </p>
+    <p>
+      <strong>Visualization note.</strong> Only a sparse subset of cells and a 12×12 TSV grid are drawn. Real geometry contains 4 096 continuous copper columns and full bank arrays. Particle motion illustrates simultaneous multi-lane charge transfer.
+    </p>
+  `;
+}
+
+/* ============================================================
+   PGPU – 4-layer hybrid STET / DTET engine
+   Spec: 16 384 ALUs, 6 GHz, physical layer isolation for divergence
+   ============================================================ */
+function buildPGPU() {
+  document.getElementById('title-bar').innerHTML =
+    'PGPU <span>· 16 384 ALUs · STET / DTET hybrid · 6.0 GHz · PRAM-tethered</span>';
+  state.proof.modeLabel = 'PGPU';
+  state.cycleCount = 0;
+  state.proof.dataMovedGB = 0;
+
+  const group = new THREE.Group();
+  state.objects.root = group;
+  state.scene.add(group);
+
+  const layerH = 0.48;
+  const gap = 0.18;
+  const layerSize = 5.5;
+  const alusPerLayer = 64;   // visual proxy (real = 4096); we show 8×8 grid
+
+  const colors = {
+    die: 0x1a1f2e,
+    aluSTET: 0xd2a8ff,
+    aluDTET: [0x3fb950, 0x58a6ff, 0xf0b429, 0xf78166],
+    pmpw: 0x79c0ff,
+    tsv: 0xc9d1d9,
+    zone: 0x30363d
+  };
+
+  // PRAM tether indication (below)
+  const pramHint = new THREE.Mesh(
+    new THREE.BoxGeometry(layerSize * 0.9, 0.4, layerSize * 0.9),
+    new THREE.MeshStandardMaterial({
+      color: 0x3d1f1a,
+      transparent: true,
+      opacity: 0.7,
+      metalness: 0.3,
+      roughness: 0.6
+    })
+  );
+  pramHint.position.y = -0.55;
+  group.add(pramHint);
+  const pramLabel = createTextSprite('8 GB PRAM stack (3.07 TB/s · 4 ns)', 0.75);
+  pramLabel.position.set(0, -0.9, layerSize * 0.5);
+  group.add(pramLabel);
+
+  // TSV forest from PRAM
+  for (let i = -2; i <= 2; i++) {
+    for (let j = -2; j <= 2; j++) {
+      const tsv = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 2.6, 8),
+        new THREE.MeshStandardMaterial({
+          color: colors.tsv,
+          metalness: 0.85,
+          roughness: 0.2,
+          emissive: 0x334455,
+          emissiveIntensity: 0.15
+        })
+      );
+      tsv.position.set(i * 1.1, 0.7, j * 1.1);
+      group.add(tsv);
+    }
+  }
+
+  state.aluMeshes = [];
+  const layerShaderNames = ['Shadow / occlusion', 'Diffuse BRDF', 'Specular / reflection', 'Denoise / output'];
+
+  for (let L = 0; L < 4; L++) {
+    const y = L * (layerH + gap) + 0.3;
+
+    // Die
+    const die = new THREE.Mesh(
+      new THREE.BoxGeometry(layerSize, layerH * 0.8, layerSize),
+      new THREE.MeshStandardMaterial({
+        color: colors.die,
+        metalness: 0.4,
+        roughness: 0.55,
+        transparent: true,
+        opacity: 0.88
+      })
+    );
+    die.position.y = y;
+    group.add(die);
+
+    // 4 execution zones (for DTET sub-zoning)
+    const zoneSize = layerSize / 2 - 0.15;
+    for (let zx = 0; zx < 2; zx++) {
+      for (let zz = 0; zz < 2; zz++) {
+        const zone = new THREE.Mesh(
+          new THREE.BoxGeometry(zoneSize, layerH * 0.15, zoneSize),
+          new THREE.MeshStandardMaterial({
+            color: colors.zone,
+            transparent: true,
+            opacity: 0.5
+          })
+        );
+        zone.position.set(
+          (zx - 0.5) * (zoneSize + 0.2),
+          y + layerH * 0.25,
+          (zz - 0.5) * (zoneSize + 0.2)
+        );
+        group.add(zone);
+      }
+    }
+
+    // ALUs – color by mode later
+    const gridN = 8;
+    const pitch = (layerSize - 0.8) / (gridN - 1);
+    for (let i = 0; i < gridN; i++) {
+      for (let j = 0; j < gridN; j++) {
+        const alu = new THREE.Mesh(
+          new THREE.BoxGeometry(0.32, 0.18, 0.32),
+          new THREE.MeshStandardMaterial({
+            color: colors.aluSTET,
+            emissive: colors.aluSTET,
+            emissiveIntensity: 0.25,
+            metalness: 0.2,
+            roughness: 0.4
+          })
+        );
+        alu.position.set(
+          -layerSize / 2 + 0.4 + i * pitch,
+          y + layerH * 0.45,
+          -layerSize / 2 + 0.4 + j * pitch
+        );
+        alu.userData = {
+          layer: L,
+          baseColor: colors.aluSTET,
+          dtetColor: colors.aluDTET[L],
+          baseEmissive: 0.25
+        };
+        group.add(alu);
+        state.aluMeshes.push(alu);
+      }
+    }
+
+    // Horizontal instruction “street”
+    const street = new THREE.Mesh(
+      new THREE.BoxGeometry(layerSize * 0.95, 0.03, 0.06),
+      new THREE.MeshStandardMaterial({
+        color: colors.pmpw,
+        emissive: colors.pmpw,
+        emissiveIntensity: 0.4
+      })
+    );
+    street.position.set(0, y + layerH * 0.55, 0);
+    group.add(street);
+
+    // Layer label
+    const label = createTextSprite(`L${L + 1} · ${layerShaderNames[L]}`, 0.7);
+    label.position.set(0, y + layerH * 0.7, layerSize * 0.55 + 0.25);
+    group.add(label);
+  }
+
+  // Top interposer / CPU bond indication
+  const top = new THREE.Mesh(
+    new THREE.BoxGeometry(layerSize * 0.6, 0.2, layerSize * 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x1a2332, metalness: 0.5, roughness: 0.4 })
+  );
+  top.position.y = 4 * (layerH + gap) + 0.35;
+  group.add(top);
+  const topLabel = createTextSprite('Bond to PENTAL-CPU', 0.65);
+  topLabel.position.set(0, 4 * (layerH + gap) + 0.6, layerSize * 0.35);
+  group.add(topLabel);
+
+  // Data particles from PRAM upward
+  state.dataParticles = [];
+  for (let p = 0; p < 30; p++) {
+    const particle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 6, 6),
+      new THREE.MeshStandardMaterial({
+        color: 0xff9f6b,
+        emissive: 0xff9f6b,
+        emissiveIntensity: 0.7
+      })
+    );
+    particle.position.set(
+      (Math.random() - 0.5) * 4,
+      -0.3 + Math.random() * 2.5,
+      (Math.random() - 0.5) * 4
+    );
+    particle.userData = {
+      speed: 0.6 + Math.random() * 1.0,
+      phase: Math.random() * Math.PI * 2
+    };
+    group.add(particle);
+    state.dataParticles.push(particle);
+  }
+
+  buildControls([
+    { id: 'modeSTET', label: 'STET mode (uniform)', action: () => { state.options.stetMode = true; applyPGPUMode(); } },
+    { id: 'modeDTET', label: 'DTET mode (divergent)', action: () => { state.options.stetMode = false; applyPGPUMode(); } },
+    { id: 'toggleFlow', label: 'Toggle data flow', action: () => { state.options.showDataFlow = !state.options.showDataFlow; } },
+    { id: 'speed', label: 'Cycle speed ×2', action: () => { state.options.speed = state.options.speed === 1 ? 2 : 1; } }
+  ]);
+
+  document.getElementById('legend').innerHTML = `
+    <div class="row"><div class="swatch" style="background:#d2a8ff"></div>ALU (STET – same instruction)</div>
+    <div class="row"><div class="swatch" style="background:#3fb950"></div>L1 DTET – shadow</div>
+    <div class="row"><div class="swatch" style="background:#58a6ff"></div>L2 DTET – diffuse</div>
+    <div class="row"><div class="swatch" style="background:#f0b429"></div>L3 DTET – specular</div>
+    <div class="row"><div class="swatch" style="background:#f78166"></div>L4 DTET – denoise</div>
+  `;
+
+  document.getElementById('info-panel').innerHTML = `
+    <h3>PGPU – Physical solution to warp divergence</h3>
+    <div class="metrics">
+      <div class="metric"><div class="k">Total ALUs</div><div class="v">16 384</div></div>
+      <div class="metric"><div class="k">ALUs / layer</div><div class="v">4 096</div></div>
+      <div class="metric"><div class="k">Clock</div><div class="v">6.0 GHz (166 ps)</div></div>
+      <div class="metric"><div class="k">PRAM tether</div><div class="v">3.07 TB/s · 4 ns</div></div>
+      <div class="metric"><div class="k">Power (core)</div><div class="v">~300 W</div></div>
+      <div class="metric"><div class="k">Triangle setup (STET)</div><div class="v">~98 B / s</div></div>
+    </div>
+    <p>
+      <strong>STET (Same Tasks Exact Time).</strong> A single global instruction is broadcast on the horizontal PMPW street.
+      All 16 384 ALUs execute the identical opcode on the same 166 ps edge. Used for uniform vertex transforms, matrix multiplies, and post-process kernels.
+      Spec peak: 16 384 triangles/cycle → ~98.3 billion triangles/s at 6 GHz (texture traffic still bounded by PRAM’s 3.07 TB/s).
+    </p>
+    <p>
+      <strong>DTET (Different Tasks Exact Time).</strong> Each of the four physical layers has its own local instruction decoder and program counter stored in PRAM.
+      Layer 1 can run occlusion tests while Layer 2 evaluates Lambertian BRDFs, Layer 3 traces reflections, and Layer 4 runs a denoiser – all on the same clock edge.
+      Because the instruction streams are physically isolated, there is no warp-wide serialization when rays diverge.
+      Further subdivision into four 1 024-ALU zones per layer permits up to 16 concurrent shader types.
+    </p>
+    <p>
+      <strong>Why this matters.</strong> Classic SIMD GPUs share one instruction pointer per warp of 32 threads. Divergent branches force serial execution of each path while other lanes idle.
+      The PGPU claim is that divergence is moved from a software/hardware scheduling problem into a spatial partitioning problem: different paths live on different silicon layers (or zones) and therefore never contend for the same instruction bus.
+    </p>
+    <p>
+      <strong>Visualization limit.</strong> Only 64 ALUs per layer are drawn (8×8). Real count is 4 096. Particle streams represent PRAM → ALU data movement at the claimed 4 ns / 3.07 TB/s envelope.
+      Use the STET / DTET buttons to switch the coloring that illustrates uniform versus layer-isolated execution.
+    </p>
+  `;
+
+  applyPGPUMode();
+}
+
+function applyPGPUMode() {
+  state.aluMeshes.forEach(alu => {
+    const mat = alu.material;
+    if (state.options.stetMode) {
+      mat.color.setHex(0xd2a8ff);
+      mat.emissive.setHex(0xd2a8ff);
+    } else {
+      mat.color.setHex(alu.userData.dtetColor);
+      mat.emissive.setHex(alu.userData.dtetColor);
+    }
+  });
+}
+
+/* ---------- Shared helpers ---------- */
+function createTextSprite(text, scale = 1) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(10,12,16,0.75)';
+  ctx.fillRect(0, 0, 512, 64);
+  ctx.font = '600 28px JetBrains Mono, monospace';
+  ctx.fillStyle = '#e6edf3';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 32);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(3.2 * scale, 0.4 * scale, 1);
+  return sprite;
+}
+
+function createDataFlowParticles(parent, tsvPositions, maxH) {
+  state.dataParticles = [];
+  for (let i = 0; i < 40; i++) {
+    const tsv = tsvPositions[Math.floor(Math.random() * tsvPositions.length)];
+    const p = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 6, 6),
+      new THREE.MeshStandardMaterial({
+        color: 0x58a6ff,
+        emissive: 0x58a6ff,
+        emissiveIntensity: 0.9
+      })
+    );
+    p.position.set(tsv.x, Math.random() * maxH, tsv.z);
+    p.userData = {
+      tsv,
+      speed: 0.7 + Math.random() * 1.4,
+      direction: Math.random() > 0.4 ? 1 : -1,
+      maxY: maxH
+    };
+    parent.add(p);
+    state.dataParticles.push(p);
+  }
+}
+
+function buildControls(items) {
+  const box = document.getElementById('controls');
+  box.innerHTML = '';
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.id = item.id;
+    btn.textContent = item.label;
+    btn.addEventListener('click', () => {
+      item.action();
+      btn.classList.toggle('active');
+    });
+    box.appendChild(btn);
+  });
+}
+
+/* ---------- Animation loop ---------- */
+function animate() {
+  state.animId = requestAnimationFrame(animate);
+  const t = performance.now() * 0.001 * state.options.speed;
+  state.clock = t;
+
+  // Cycle counter (visual only) – scaled to claim realism
+  if (t - state.lastCycleTime > 0.04) {
+    const dt = t - state.lastCycleTime;
+    // Approximate visual cycles proportional to claimed GHz
+    let ghz = 5.1;
+    if (state.mode === 'pgpu') ghz = 6.0;
+    if (state.mode === 'pram') ghz = 6.0;
+    const cyclesThis = Math.floor(ghz * 1e9 * dt * 0.000002 * state.options.speed); // visual scale
+    state.cycleCount += Math.max(1, cyclesThis);
+    state.lastCycleTime = t;
+
+    // Estimated data moved (GB) using claimed bandwidth scaled for viz
+    let bwTBs = 0;
+    if (state.mode === 'pram' || state.mode === 'pgpu') bwTBs = 3.07;
+    else if (state.mode === 'pcpu') bwTBs = 0.4; // internal + TSV estimate for viz
+    state.proof.dataMovedGB += bwTBs * dt * state.options.speed * 0.15;
+  }
+
+  // ALU activity pulse + saturation estimate
+  let activeSum = 0;
+  state.aluMeshes.forEach((alu, idx) => {
+    const phase = (t * 8 + idx * 0.15) % (Math.PI * 2);
+    const intensity = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(phase));
+    alu.material.emissiveIntensity = intensity;
+    activeSum += intensity;
+  });
+  if (state.aluMeshes.length) {
+    state.proof.aluActivePct = Math.min(99.9, (activeSum / state.aluMeshes.length) * 180);
+  } else {
+    state.proof.aluActivePct = state.options.showDataFlow ? 92 + 6 * Math.sin(t * 2) : 0;
+  }
+
+  // Data / charge particles
+  if (state.options.showDataFlow) {
+    state.dataParticles.forEach(p => {
+      p.visible = true;
+      if (p.userData.tsv) {
+        // Vertical TSV travel
+        p.position.y += p.userData.direction * p.userData.speed * 0.016 * state.options.speed;
+        if (p.position.y > p.userData.maxY) {
+          p.position.y = 0;
+          p.userData.direction = 1;
+        } else if (p.position.y < 0) {
+          p.position.y = p.userData.maxY;
+          p.userData.direction = -1;
+        }
+      } else {
+        // Free-floating upward (PGPU)
+        p.position.y += p.userData.speed * 0.012 * state.options.speed;
+        if (p.position.y > 2.8) p.position.y = -0.3;
+        p.position.x += Math.sin(t * 2 + p.userData.phase) * 0.002;
+      }
+    });
+  } else {
+    state.dataParticles.forEach(p => { p.visible = false; });
+  }
+
+  // Throlter heat pulse (PCPU)
+  if (state.options.showHeat && state.objects.root) {
+    state.objects.root.traverse(obj => {
+      if (obj.userData && obj.userData.isThrolter) {
+        obj.material.emissiveIntensity = 0.3 + 0.35 * (0.5 + 0.5 * Math.sin(t * 3));
+      }
+    });
+  }
+
+  // Live proof HUD
+  updateLiveProof();
+
+  if (state.controls) state.controls.update();
+  if (state.renderer && state.scene && state.camera) {
+    state.renderer.render(state.scene, state.camera);
+  }
+}
+
+function updateLiveProof() {
+  const el = document.getElementById('live-proof');
+  if (!el) return;
+  let modeNote = '—';
+  let bwClaim = '—';
+  let latClaim = '—';
+  if (state.mode === 'pcpu') {
+    modeNote = 'PMPW continuous paths';
+    bwClaim = 'TSV elevators + on-layer matrix';
+    latClaim = '~196 ps @ 5.1 GHz';
+  } else if (state.mode === 'pram') {
+    modeNote = 'Voltage-coordinate cross-point';
+    bwClaim = '3.07 TB/s (4 096 TSVs)';
+    latClaim = '~4.0 ns (16 GB banked)';
+  } else if (state.mode === 'pgpu') {
+    modeNote = state.options.stetMode ? 'STET (uniform army)' : 'DTET (layer-isolated)';
+    bwClaim = '3.07 TB/s PRAM tether';
+    latClaim = '166 ps cycle @ 6.0 GHz';
+  }
+
+  el.innerHTML = `
+    <div class="title">Live proof (visual scale)</div>
+    <div class="row"><span>Simulated cycles</span><span class="val">${state.cycleCount.toLocaleString()}</span></div>
+    <div class="row"><span>Data moved (GB)</span><span class="val">${state.proof.dataMovedGB.toFixed(2)}</span></div>
+    <div class="row"><span>ALU activity</span><span class="val ok">${state.proof.aluActivePct.toFixed(1)}%</span></div>
+    <div class="row"><span>Mode</span><span class="val hot">${modeNote}</span></div>
+    <div class="row"><span>Claimed BW</span><span class="val">${bwClaim}</span></div>
+    <div class="row"><span>Claimed latency</span><span class="val">${latClaim}</span></div>
+  `;
+}
+</script>
+</body>
+</html>

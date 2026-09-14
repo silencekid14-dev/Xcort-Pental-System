@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PENTAL – Honest Behavioral Prototype</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+:root{--bg:#0a0c10;--panel:#12151c;--border:#1e2430;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--cpu:#3fb950;--ram:#f78166;--gpu:#d2a8ff;--warn:#f0b429}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden;height:100vh;width:100vw}
+#menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#12151c 0%,#0a0c10 70%);z-index:100;transition:opacity .35s,visibility .35s}
+#menu.hidden{opacity:0;visibility:hidden;pointer-events:none}
+#menu h1{font-family:'JetBrains Mono',monospace;font-size:1.55rem;font-weight:700;margin-bottom:.2rem}
+#menu .sub{color:var(--muted);font-size:.84rem;margin-bottom:1.4rem;max-width:600px;text-align:center;line-height:1.5}
+.choice-row{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center}
+.choice{width:195px;padding:1rem .95rem;background:var(--panel);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .2s;text-align:left}
+.choice:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.choice .label{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:1rem;margin-bottom:.15rem}
+.choice.cpu .label{color:var(--cpu)}.choice.ram .label{color:var(--ram)}.choice.gpu .label{color:var(--gpu)}.choice.all .label{color:var(--warn)}
+.choice .desc{font-size:.7rem;color:var(--muted);line-height:1.35}
+#viewport{position:absolute;inset:0;display:none;background:var(--bg)}
+#viewport.active{display:block}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:0;left:0;right:0;z-index:30;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:linear-gradient(to bottom,rgba(10,12,16,.92),transparent);pointer-events:none}
+#hud-left,#hud-right{pointer-events:auto;display:flex;gap:6px;align-items:center}
+#title-bar{font-family:'JetBrains Mono',monospace;font-size:.82rem;font-weight:600}
+#title-bar span{color:var(--muted);font-weight:400}
+button.ui{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:5px;font-size:.7rem;cursor:pointer}
+button.ui:hover,button.ui.active{border-color:var(--accent);background:#1a2030}
+button.ui.mode-active{border-color:var(--accent);background:#1a2030;color:var(--accent)}
+#controls{position:absolute;top:46px;right:10px;z-index:40;display:flex;flex-direction:column;gap:5px}
+#controls button{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:5px;font-size:.68rem;cursor:pointer;text-align:left;min-width:138px}
+#controls button:hover,#controls button.active{border-color:var(--accent);background:#1a2030}
+#legend{position:absolute;top:46px;left:10px;z-index:40;background:rgba(18,21,28,.93);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.64rem;line-height:1.45;max-width:185px}
+#legend .row{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+#legend .swatch{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+#live-proof{position:absolute;bottom:32%;right:10px;z-index:40;background:rgba(18,21,28,.95);border:1px solid var(--border);border-radius:8px;padding:8px 11px;font-family:'JetBrains Mono',monospace;font-size:.63rem;min-width:220px}
+#live-proof .title{color:var(--muted);font-size:.56rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+#live-proof .row{display:flex;justify-content:space-between;gap:8px;margin:2px 0}
+#live-proof .val{color:var(--accent);font-weight:600}
+#live-proof .val.ok{color:#3fb950}#live-proof .val.hot{color:#f0b429}#live-proof .val.bad{color:#f85149}
+#info-panel{position:absolute;bottom:0;left:0;right:0;max-height:28%;overflow-y:auto;background:rgba(10,12,16,.94);border-top:1px solid var(--border);padding:9px 12px 11px;font-size:.72rem;line-height:1.4;z-index:30}
+#info-panel h3{font-family:'JetBrains Mono',monospace;font-size:.8rem;margin-bottom:.25rem;color:var(--accent)}
+#info-panel .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:5px 8px;margin:5px 0}
+#info-panel .metric{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:5px 7px}
+#info-panel .metric .k{font-size:.58rem;color:var(--muted);text-transform:uppercase}
+#info-panel .metric .v{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:.8rem;margin-top:1px}
+#info-panel p{color:var(--muted);margin-top:4px}
+#help-overlay{position:absolute;inset:0;background:rgba(0,0,0,.78);z-index:90;display:none;align-items:center;justify-content:center}
+#help-overlay.show{display:flex}
+#help-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1.2rem 1.4rem;max-width:480px;font-size:.78rem;line-height:1.5;max-height:85vh;overflow-y:auto}
+#help-box h3{font-family:'JetBrains Mono',monospace;margin-bottom:.4rem;color:var(--accent)}
+#help-box kbd{background:#1e2430;padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:.7rem}
+#loading{position:absolute;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:50;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+#cdn-warn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#3d1f1a;border:1px solid #f78166;padding:14px 18px;border-radius:8px;z-index:60;display:none;max-width:340px;text-align:center;font-size:.8rem}
+#pong-overlay{position:absolute;inset:0;background:rgba(0,0,0,.88);z-index:80;display:none;align-items:center;justify-content:center;flex-direction:column}
+#pong-overlay.show{display:flex}
+#pong-canvas{border:2px solid #30363d;background:#0d1117;cursor:none}
+#pong-ui{margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--muted)}
+.note{font-size:.65rem;color:var(--muted);margin-top:6px;border-top:1px solid var(--border);padding-top:6px}
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>PENTAL Behavioral Prototype</h1>
+  <p class="sub">Honest label: <strong>behavioral simulator</strong> — real demand/supply arithmetic, queue, thermal derate, idle-core OS assignment. Geometry is a scaled visual proxy. Not cycle-accurate. <kbd>H</kbd> for full honesty notes.</p>
+  <div class="choice-row">
+    <div class="choice cpu" data-target="pcpu"><div class="label">PCPU</div><div class="desc">2-layer · 8 cores · 32 ALUs · PMPW · Throlter · 5.1 GHz</div></div>
+    <div class="choice ram" data-target="pram"><div class="label">PRAM</div><div class="desc">4 096 TSV · ~4 ns base · 3.07 TB/s supply</div></div>
+    <div class="choice gpu" data-target="pgpu"><div class="label">PGPU</div><div class="desc">16 384 ALUs · STET/DTET · 6 GHz · PRAM tether</div></div>
+    <div class="choice all" data-target="all"><div class="label">All</div><div class="desc">Motherboard · boot · idle-scan OS layer · desktop · Pong</div></div>
+  </div>
+</div>
+<div id="loading">Loading…</div>
+<div id="cdn-warn">Three.js CDN timed out — 2D still works. Retry 3D later.</div>
+<div id="viewport">
+  <div id="hud">
+    <div id="hud-left"><div id="title-bar">—</div></div>
+    <div id="hud-right">
+      <button class="ui" id="btn-2d">2D</button>
+      <button class="ui" id="btn-3d">3D</button>
+      <button class="ui" id="back-btn">← Back</button>
+    </div>
+  </div>
+  <div id="legend"></div>
+  <div id="controls"></div>
+  <div id="live-proof"></div>
+  <div id="info-panel"></div>
+</div>
+<div id="help-overlay"><div id="help-box">
+  <h3>Honesty & Controls</h3>
+  <p><kbd>H</kbd> help · <kbd>2</kbd>/<kbd>3</kbd> view · <kbd>R</kbd> reset · <kbd>Space</kbd> pause<br>
+  <strong>All:</strong> POWER key → boot with real idle-core scan → desktop → <strong>double-click Pong</strong> to play.</p>
+  <p class="note"><strong>What is real:</strong> demand = ALUs × GHz × bytes/op (24 B for 64-bit FMA from PRAM.md). Supply = 3.07 TB/s. Queue grows when demand &gt; supply. Latency = 4 ns + queue×0.15 (placeholder coef, documented). Thermal derate when Throlter off. OS layer = argmin(layerLoad). STET vs DTET util direction correct; magnitude is a model assumption.<br>
+  <strong>What is visual:</strong> particle speed, cycle counter scaled for display, ALU grids 8×8 not 4096. Labeled as proxy.</p>
+  <p style="text-align:right;margin-top:8px"><button class="ui" id="help-close">Close</button></p>
+</div></div>
+<div id="pong-overlay">
+  <canvas id="pong-canvas" width="640" height="400"></canvas>
+  <div id="pong-ui">↑↓ / mouse · Space serve · Esc quit · <span id="pong-score">0 – 0</span></div>
+</div>
+<script>
+const CDN_THREE='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+const CDN_ORBIT='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+
+/* Documented constants from specs + explicit assumptions */
+const SPEC = {
+  BYTES_PER_FMA64: 24,       // 2 reads + 1 write, 8 bytes each (PRAM.md)
+  BYTES_PER_FMA32: 12,
+  PRAM_BW_TBs: 3.07,         // 4096 TSVs × 6 GHz
+  PRAM_BASE_LAT_NS: 4.0,     // banked 16GB
+  PCPU_GHZ: 5.1,
+  PGPU_GHZ: 6.0,
+  QUEUE_LAT_NS_PER_UNIT: 0.15, // MODEL ASSUMPTION — not from silicon; placeholder
+  THERMAL_DERATE_RATE: 0.04,
+  THERMAL_RECOVER_RATE: 0.08,
+  VISUAL_CYCLE_SCALE: 1e-6,  // display only — not real cycle count
+  VISUAL_DATA_SCALE: 0.25    // display pacing only
+};
+
+const state = {
+  mode:null, view:'2d', threeReady:false,
+  scene:null,camera:null,renderer:null,controls:null, animId:null, paused:false,
+  objects:{}, dataParticles:[], aluMeshes:[],
+  phys:{
+    time:0, cycles:0, dataMovedGB:0, bandwidthUsedTBs:0, aluUtil:0, latencyNs:0,
+    queueDepth:0, thermalFactor:1, stetMode:true, showFlow:true, showHeat:true, speed:1,
+    demandTBs:0, supplyTBs:0, osLayer:1, bootPhase:'off',
+    layerLoad:[0,0], // simulated active work per layer for idle-scan
+    divergentFraction:0.35 // model: fraction of workload that branches (STET penalty)
+  },
+  canvas2d:null, ctx:null, particles2d:[], alus2d:[],
+  mouse:{x:0,y:0,down:false,lastX:0,lastY:0}, cam2d:{x:0,y:0,zoom:1},
+  all:{
+    power:false, bootStep:0, bootTimer:0, bootLog:[], osAssigned:false, desktop:false,
+    // hit regions updated each draw
+    powerRect:null, pongIconRect:null, monRect:null
+  },
+  pong:{running:false, px:20, py:170, bx:320, by:200, bvx:4, bvy:2.5, ai:170, scoreP:0, scoreA:0, serve:true}
+};
+
+function loadScript(src,t=8000){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;const tm=setTimeout(()=>{s.remove();rej(new Error('timeout'))},t);s.onload=()=>{clearTimeout(tm);res()};s.onerror=()=>{clearTimeout(tm);rej(new Error('err'))};document.head.appendChild(s)})}
+async function ensureThree(){if(state.threeReady)return true;try{await loadScript(CDN_THREE,7000);await loadScript(CDN_ORBIT,5000);state.threeReady=true;return true}catch(e){console.warn(e);return false}}
+
+document.querySelectorAll('.choice').forEach(el=>el.addEventListener('click',()=>{document.getElementById('menu').classList.add('hidden');startMode(el.dataset.target)}));
+document.getElementById('back-btn').addEventListener('click',stopMode);
+document.getElementById('btn-2d').addEventListener('click',()=>setView('2d'));
+document.getElementById('btn-3d').addEventListener('click',()=>setView('3d'));
+document.getElementById('help-close').addEventListener('click',()=>document.getElementById('help-overlay').classList.remove('show'));
+
+window.addEventListener('keydown',e=>{
+  if(e.key==='h'||e.key==='H')document.getElementById('help-overlay').classList.toggle('show');
+  else if(e.key==='2')setView('2d');
+  else if(e.key==='3')setView('3d');
+  else if(e.key==='r'||e.key==='R')resetView();
+  else if(e.key===' '){if(state.pong.running){if(state.pong.serve){state.pong.serve=false;state.pong.bvx=4*(Math.random()>.5?1:-1);state.pong.bvy=(Math.random()-.5)*5}}else state.paused=!state.paused;e.preventDefault()}
+  else if(e.key==='Escape'&&state.pong.running)closePong();
+  else if(state.pong.running){
+    if(e.key==='ArrowUp'||e.key==='w')state.pong.py=Math.max(0,state.pong.py-18);
+    if(e.key==='ArrowDown'||e.key==='s')state.pong.py=Math.min(340,state.pong.py+18);
+  }
+});
+
+async function startMode(mode){
+  state.mode=mode;
+  state.phys={time:0,cycles:0,dataMovedGB:0,bandwidthUsedTBs:0,aluUtil:0,latencyNs:0,queueDepth:0,thermalFactor:1,stetMode:true,showFlow:true,showHeat:true,speed:1,demandTBs:0,supplyTBs:0,osLayer:1,bootPhase:'off',layerLoad:[0,0],divergentFraction:0.35};
+  state.all={power:false,bootStep:0,bootTimer:0,bootLog:[],osAssigned:false,desktop:false,powerRect:null,pongIconRect:null,monRect:null};
+  document.getElementById('viewport').classList.add('active');
+  document.getElementById('loading').style.display='flex';
+  const ok=await ensureThree();
+  document.getElementById('loading').style.display='none';
+  if(!ok){document.getElementById('cdn-warn').style.display='block';setTimeout(()=>document.getElementById('cdn-warn').style.display='none',3500);state.view='2d'}
+  else state.view=(mode==='all'?'2d':'3d');
+  document.getElementById('btn-3d').style.display=''; // All also supports 3D now
+  updateViewButtons();
+  buildScene();
+  if(state.animId)cancelAnimationFrame(state.animId);
+  animate();
+}
+function stopMode(){
+  if(state.animId)cancelAnimationFrame(state.animId);state.animId=null;
+  teardownThree();
+  if(state.canvas2d&&state.canvas2d.parentNode)state.canvas2d.parentNode.removeChild(state.canvas2d);
+  state.canvas2d=null; closePong();
+  document.getElementById('viewport').classList.remove('active');
+  document.getElementById('menu').classList.remove('hidden');
+  document.getElementById('controls').innerHTML='';document.getElementById('legend').innerHTML='';document.getElementById('info-panel').innerHTML='';document.getElementById('live-proof').innerHTML='';
+  state.mode=null;
+}
+function setView(v){
+  if(v==='3d'&&!state.threeReady){document.getElementById('cdn-warn').style.display='block';setTimeout(()=>document.getElementById('cdn-warn').style.display='none',2800);return}
+  if(state.view===v)return; state.view=v; updateViewButtons(); buildScene();
+}
+function updateViewButtons(){
+  document.getElementById('btn-2d').classList.toggle('mode-active',state.view==='2d');
+  document.getElementById('btn-3d').classList.toggle('mode-active',state.view==='3d');
+}
+function resetView(){if(state.view==='3d'&&state.controls){state.controls.reset();state.camera.position.set(9,7,11)}else state.cam2d={x:0,y:0,zoom:1}}
+
+function buildScene(){
+  teardownThree();
+  if(state.canvas2d&&state.canvas2d.parentNode)state.canvas2d.parentNode.removeChild(state.canvas2d);
+  state.canvas2d=null; state.dataParticles=[]; state.aluMeshes=[]; state.particles2d=[]; state.alus2d=[];
+  document.getElementById('controls').innerHTML=''; document.getElementById('legend').innerHTML='';
+  if(state.mode==='all'){
+    if(state.view==='3d'&&state.threeReady){initThree(); buildAll3D();}
+    else{state.view='2d'; updateViewButtons(); init2D(); buildAll2D();}
+  } else if(state.view==='3d'){
+    initThree();
+    if(state.mode==='pcpu')buildPCPU3D();
+    else if(state.mode==='pram')buildPRAM3D();
+    else if(state.mode==='pgpu')buildPGPU3D();
+  } else {
+    init2D();
+    if(state.mode==='pcpu')buildPCPU2D();
+    else if(state.mode==='pram')buildPRAM2D();
+    else if(state.mode==='pgpu')buildPGPU2D();
+  }
+  fillInfoPanel();
+}
+
+/* ========== REAL PHYSICS (documented) ========== */
+function physicsStep(dt){
+  if(state.paused)return;
+  const p=state.phys;
+  p.time+=dt*p.speed;
+
+  let ghz = (state.mode==='pgpu') ? SPEC.PGPU_GHZ : SPEC.PCPU_GHZ;
+  if(state.mode==='pram') ghz = SPEC.PGPU_GHZ; // memory clocked with fabric
+  if(state.mode==='all') ghz = SPEC.PCPU_GHZ;
+  ghz *= p.thermalFactor;
+
+  // Display-scaled cycle counter (NOT real 6e9/s) — labeled as visual
+  p.cycles += ghz * 1e9 * dt * p.speed * SPEC.VISUAL_CYCLE_SCALE;
+
+  // Supply
+  if(state.mode==='pram'||state.mode==='pgpu'||state.mode==='all') p.supplyTBs = SPEC.PRAM_BW_TBs;
+  else p.supplyTBs = 0.55; // internal estimate for PCPU-only viz
+
+  // Demand from first principles (PRAM.md arithmetic)
+  let aluCount = 32; // 2-layer PCPU
+  let bytesPerOp = SPEC.BYTES_PER_FMA64;
+  if(state.mode==='pgpu'){ aluCount=16384; bytesPerOp=SPEC.BYTES_PER_FMA32; } // 32-bit path often used in graphics
+  else if(state.mode==='pram'){ aluCount=0; }
+  else if(state.mode==='all'){ aluCount=32; bytesPerOp=SPEC.BYTES_PER_FMA64; } // system idle-ish demand scaled later
+
+  p.demandTBs = (aluCount * ghz * 1e9 * bytesPerOp) / 1e12;
+  if(state.mode==='all') p.demandTBs *= (state.all.desktop ? 0.4 : 0.08); // boot vs desktop load factor
+
+  // STET/DTET: utilisation = 1 - divergentFraction for STET; near-full for DTET
+  // This is a MODEL, not scene-trace divergence. Direction matches architecture claim.
+  let utilFactor = 1.0;
+  if(state.mode==='pgpu' || (state.mode==='all' && state.all.desktop)){
+    if(p.stetMode) utilFactor = 1.0 - p.divergentFraction * 0.85; // serialisation waste
+    else utilFactor = 0.94; // layer isolation
+    // small noise from workload mix, not a pure sine as "divergence"
+    utilFactor += (Math.sin(p.time*0.4)*0.03);
+  }
+
+  const bwLim = p.demandTBs > 1e-6 ? Math.min(1, p.supplyTBs / p.demandTBs) : 1;
+  p.aluUtil = Math.max(0, Math.min(100, utilFactor * bwLim * 100));
+  if(state.mode==='pram') p.aluUtil = 0;
+
+  // Queue (leaky bucket)
+  if(p.demandTBs > p.supplyTBs) p.queueDepth = Math.min(64, p.queueDepth + (p.demandTBs - p.supplyTBs)*dt*8);
+  else p.queueDepth = Math.max(0, p.queueDepth - dt*12);
+
+  const baseLat = (state.mode==='pram'||state.mode==='pgpu'||state.mode==='all') ? SPEC.PRAM_BASE_LAT_NS : 0.2;
+  p.latencyNs = baseLat + p.queueDepth * SPEC.QUEUE_LAT_NS_PER_UNIT;
+
+  const actualBW = Math.min(p.supplyTBs, p.demandTBs || p.supplyTBs);
+  p.bandwidthUsedTBs = actualBW;
+  p.dataMovedGB += actualBW * dt * p.speed * SPEC.VISUAL_DATA_SCALE;
+
+  // Thermal
+  if(!p.showHeat && (state.mode==='pcpu'||state.mode==='all'))
+    p.thermalFactor = Math.max(0.72, p.thermalFactor - dt*SPEC.THERMAL_DERATE_RATE);
+  else
+    p.thermalFactor = Math.min(1, p.thermalFactor + dt*SPEC.THERMAL_RECOVER_RATE);
+
+  // Simulated layer loads for idle-scan (All + PCPU)
+  // L0 gets compute traffic; L1 gets OS/background
+  if(state.mode==='all'||state.mode==='pcpu'){
+    const base0 = state.all.desktop ? 0.55 : 0.15;
+    const base1 = state.all.osAssigned ? 0.35 : 0.05;
+    p.layerLoad[0] = base0 + 0.1*Math.sin(p.time*0.9) + (p.stetMode?0.05:0);
+    p.layerLoad[1] = base1 + 0.05*Math.sin(p.time*0.6+1);
+  }
+
+  // Boot state machine + REAL idle-core OS assignment
+  if(state.mode==='all' && state.all.power){
+    state.all.bootTimer += dt * p.speed;
+    const steps = [
+      {t:0.35, msg:'PSU: 12V rails stable', phase:'psu'},
+      {t:0.9,  msg:'CPU ctrl: measuring Layer 0 load…', phase:'scan0'},
+      {t:1.5,  msg:'CPU ctrl: measuring Layer 1 load…', phase:'scan1'},
+      {t:2.1,  msg:null, phase:'assign'}, // message filled by assignOS()
+      {t:2.7,  msg:'PRAM: voltage-coordinate init · 4.0 ns · 3.07 TB/s', phase:'pram'},
+      {t:3.4,  msg:'PGPU: tether check · STET/DTET ready', phase:'gpu'},
+      {t:4.1,  msg:'UEFI → Windows bootloader', phase:'bootloader'},
+      {t:5.1,  msg:'ntoskrnl loading on assigned layer', phase:'kernel'},
+      {t:6.3,  msg:'Desktop session ready', phase:'desktop'}
+    ];
+    for(let i=0;i<steps.length;i++){
+      const s=steps[i];
+      if(state.all.bootTimer>=s.t && state.all.bootStep<i+1){
+        state.all.bootStep=i+1;
+        if(s.phase==='assign'){
+          const chosen = assignOSLayer();
+          const msg = 'OS affinity → Layer '+chosen+' (load L0='+p.layerLoad[0].toFixed(2)+' L1='+p.layerLoad[1].toFixed(2)+')';
+          state.all.bootLog.push(msg);
+          state.phys.bootPhase='assign';
+          state.all.osAssigned=true;
+        } else {
+          state.all.bootLog.push(s.msg);
+          state.phys.bootPhase=s.phase;
+          if(s.phase==='desktop') state.all.desktop=true;
+        }
+      }
+    }
+  }
+}
+
+/** Real idle-scan: pick layer with lowest simulated load */
+function assignOSLayer(){
+  const loads = state.phys.layerLoad;
+  let best=0, min=loads[0];
+  for(let i=1;i<loads.length;i++) if(loads[i]<min){min=loads[i];best=i}
+  state.phys.osLayer = best;
+  return best;
+}
+
+/* ========== 2D ========== */
+function init2D(){
+  const vp=document.getElementById('viewport');
+  const c=document.createElement('canvas'); c.id='c2d'; c.width=window.innerWidth; c.height=window.innerHeight;
+  vp.appendChild(c); state.canvas2d=c; state.ctx=c.getContext('2d'); state.cam2d={x:0,y:0,zoom:1};
+
+  c.addEventListener('mousedown',e=>{
+    state.mouse.down=true; state.mouse.lastX=e.clientX; state.mouse.lastY=e.clientY;
+    if(state.mode==='all') handleAllClick(e);
+  });
+  window.addEventListener('mouseup',()=>state.mouse.down=false);
+  window.addEventListener('mousemove',e=>{
+    state.mouse.x=e.clientX; state.mouse.y=e.clientY;
+    if(state.mouse.down&&state.view==='2d'&&state.mode!=='all'){
+      state.cam2d.x+=(e.clientX-state.mouse.lastX); state.cam2d.y+=(e.clientY-state.mouse.lastY);
+      state.mouse.lastX=e.clientX; state.mouse.lastY=e.clientY;
+    }
+    if(state.pong.running){
+      const r=document.getElementById('pong-canvas').getBoundingClientRect();
+      state.pong.py=Math.max(0,Math.min(340,(e.clientY-r.top)/r.height*400-30));
+    }
+  });
+  c.addEventListener('wheel',e=>{
+    e.preventDefault();
+    if(state.mode==='all')return;
+    const f=e.deltaY>0?0.9:1.1; state.cam2d.zoom=Math.max(0.35,Math.min(2.5,state.cam2d.zoom*f));
+  },{passive:false});
+  // FIX: reliable double-click for Pong
+  c.addEventListener('dblclick',e=>{
+    if(state.mode==='all'&&state.all.desktop) handleAllDblClick(e);
+  });
+  window.addEventListener('resize',()=>{if(state.canvas2d){state.canvas2d.width=window.innerWidth;state.canvas2d.height=window.innerHeight}});
+}
+
+function handleAllClick(e){
+  const rect=state.canvas2d.getBoundingClientRect();
+  const x=e.clientX-rect.left, y=e.clientY-rect.top;
+  const pr=state.all.powerRect;
+  if(pr && x>=pr.x && x<=pr.x+pr.w && y>=pr.y && y<=pr.y+pr.h){
+    if(!state.all.power){
+      state.all.power=true; state.all.bootTimer=0; state.all.bootStep=0;
+      state.all.bootLog=['> Power button pressed']; state.all.osAssigned=false; state.all.desktop=false;
+    }
+  }
+}
+function handleAllDblClick(e){
+  const rect=state.canvas2d.getBoundingClientRect();
+  const x=e.clientX-rect.left, y=e.clientY-rect.top;
+  const ir=state.all.pongIconRect;
+  if(ir && x>=ir.x && x<=ir.x+ir.w && y>=ir.y && y<=ir.y+ir.h){
+    openPong();
+  }
+}
+
+function draw2D(){
+  const ctx=state.ctx; if(!ctx)return;
+  const w=state.canvas2d.width, h=state.canvas2d.height;
+  ctx.fillStyle='#0a0c10'; ctx.fillRect(0,0,w,h);
+  if(state.mode==='all'){ drawAllSystem(ctx,w,h); return; }
+  ctx.save();
+  ctx.translate(w/2+state.cam2d.x, h/2+state.cam2d.y);
+  ctx.scale(state.cam2d.zoom, state.cam2d.zoom);
+  if(state.mode==='pcpu')drawPCPU2D(ctx);
+  else if(state.mode==='pram')drawPRAM2D(ctx);
+  else if(state.mode==='pgpu')drawPGPU2D(ctx);
+  state.particles2d.forEach(pt=>{
+    if(!state.phys.showFlow)return;
+    ctx.beginPath(); ctx.arc(pt.x,pt.y,3.5,0,Math.PI*2);
+    ctx.fillStyle=pt.color||'#58a6ff'; ctx.shadowColor=pt.color||'#58a6ff'; ctx.shadowBlur=8; ctx.fill(); ctx.shadowBlur=0;
+  });
+  ctx.restore();
+}
+
+function spawnParticle2D(x,y,targetY,speed,color){state.particles2d.push({x,y,targetY,speed,color:color||'#58a6ff'})}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+
+function buildPCPU2D(){
+  document.getElementById('title-bar').innerHTML='PCPU <span>· 2-layer behavioral · 32 ALUs</span>';
+  state.alus2d=[]; for(let L=0;L<2;L++)for(let i=0;i<16;i++)state.alus2d.push({layer:L,lastData:0});
+  buildControls([
+    {id:'toggleFlow',label:'Toggle data flow',action:()=>{state.phys.showFlow=!state.phys.showFlow}},
+    {id:'toggleHeat',label:'Toggle Throlter',action:()=>{state.phys.showHeat=!state.phys.showHeat}},
+    {id:'speed',label:'Sim speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}
+  ]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#3fb950"></div>ALU (proxy grid)</div><div class="row"><div class="swatch" style="background:#58a6ff"></div>PMPW / data</div><div class="row"><div class="swatch" style="background:#8b5cf6"></div>Throlter</div>`;
+}
+function drawPCPU2D(ctx){
+  const layerH=80,gap=30,w=280,h=60;
+  const names=['L0 · Compute + PMPW','L1 · OS candidate'];
+  for(let L=0;L<2;L++){
+    const y=40-L*(layerH+gap);
+    ctx.fillStyle='#1a2332'; ctx.strokeStyle=state.phys.osLayer===L&&state.all.osAssigned?'#3fb950':'#2a3548';
+    roundRect(ctx,-w/2,y-h/2,w,h,4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#8b949e'; ctx.font='11px JetBrains Mono,monospace';
+    ctx.fillText(names[L]+' load='+state.phys.layerLoad[L].toFixed(2),-w/2+8,y-h/2+14);
+    for(let i=0;i<16;i++){
+      const col=i%4,row=Math.floor(i/4);
+      const ax=-w/2+30+col*55, ay=y-14+row*14;
+      const alu=state.alus2d[L*16+i];
+      const age=state.phys.time-(alu.lastData||0);
+      const active=age<(state.phys.latencyNs*0.002+0.08);
+      ctx.fillStyle=active?'#3fb950':'#1e3a28'; ctx.fillRect(ax,ay,12,10);
+    }
+    if(L===0){const ty=y-h/2-gap/2; ctx.fillStyle=state.phys.showHeat?'rgba(139,92,246,0.5)':'rgba(80,60,100,0.25)'; ctx.fillRect(-w/2-10,ty-3,w+20,6)}
+  }
+  for(let i=-2;i<=2;i++){ctx.strokeStyle='#c9d1d9';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(i*45,100);ctx.lineTo(i*45,40-1*(layerH+gap)-20);ctx.stroke()}
+  if(state.phys.showFlow&&Math.random()<0.15*state.phys.speed){const x=(Math.floor(Math.random()*5)-2)*45;spawnParticle2D(x,100,40-1*(layerH+gap)-20,1.8,'#58a6ff')}
+  state.particles2d.forEach(pt=>pt.y-=pt.speed*state.phys.speed*1.6);
+  state.particles2d=state.particles2d.filter(pt=>{if(pt.y<=pt.targetY){const a=state.alus2d[Math.floor(Math.random()*state.alus2d.length)];if(a)a.lastData=state.phys.time;return false}return true});
+}
+
+function buildPRAM2D(){
+  document.getElementById('title-bar').innerHTML='PRAM <span>· behavioral · 3.07 TB/s hard ceiling</span>';
+  state.alus2d=[]; for(let i=0;i<128;i++)state.alus2d.push({lastAccess:0});
+  buildControls([{id:'toggleFlow',label:'Toggle charge',action:()=>{state.phys.showFlow=!state.phys.showFlow}},{id:'speed',label:'Sim speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#f78166"></div>Cell (proxy)</div><div class="row"><div class="swatch" style="background:#58a6ff"></div>Charge</div>`;
+}
+function drawPRAM2D(ctx){
+  const layers=6,layerH=26,gap=7,w=240;
+  for(let L=0;L<layers;L++){const y=70-L*(layerH+gap);ctx.fillStyle='#2a1a14';ctx.strokeStyle='#4a3028';roundRect(ctx,-w/2,y-layerH/2,w,layerH,3);ctx.fill();ctx.stroke();ctx.fillStyle='#f78166';ctx.font='10px JetBrains Mono,monospace';ctx.fillText('L'+(L+1),-w/2+6,y-layerH/2+12);for(let c=0;c<14;c++){const cell=state.alus2d[L*14+c];const on=state.phys.time-(cell?.lastAccess||0)<0.12;ctx.fillStyle=on?'#f78166':'#5a3028';ctx.fillRect(-w/2+36+c*13,y-5,10,9)}}
+  for(let i=-4;i<=4;i++){ctx.strokeStyle='#c9d1d9';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(i*22,100);ctx.lineTo(i*22,70-5*(layerH+gap)-10);ctx.stroke()}
+  if(state.phys.showFlow&&Math.random()<0.22*state.phys.speed)spawnParticle2D((Math.floor(Math.random()*9)-4)*22,100,70-5*(layerH+gap)-10,2.1,'#f78166');
+  state.particles2d.forEach(pt=>pt.y-=pt.speed*state.phys.speed*1.8);
+  state.particles2d=state.particles2d.filter(pt=>{if(pt.y<=pt.targetY){const cell=state.alus2d[Math.floor(Math.random()*state.alus2d.length)];if(cell)cell.lastAccess=state.phys.time;return false}return true});
+}
+
+function buildPGPU2D(){
+  document.getElementById('title-bar').innerHTML='PGPU <span>· STET/DTET model · demand vs 3.07 TB/s</span>';
+  state.alus2d=[]; for(let L=0;L<4;L++)for(let i=0;i<36;i++)state.alus2d.push({layer:L,lastData:0});
+  buildControls([
+    {id:'modeSTET',label:'STET (shared IP)',action:()=>{state.phys.stetMode=true}},
+    {id:'modeDTET',label:'DTET (layer-isol.)',action:()=>{state.phys.stetMode=false}},
+    {id:'toggleFlow',label:'Data flow',action:()=>{state.phys.showFlow=!state.phys.showFlow}},
+    {id:'speed',label:'Speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}
+  ]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#d2a8ff"></div>STET</div><div class="row"><div class="swatch" style="background:#3fb950"></div>L1</div><div class="row"><div class="swatch" style="background:#58a6ff"></div>L2</div><div class="row"><div class="swatch" style="background:#f0b429"></div>L3</div><div class="row"><div class="swatch" style="background:#f78166"></div>L4</div>`;
+}
+function drawPGPU2D(ctx){
+  const layerH=52,gap=16,w=290; const colors=['#3fb950','#58a6ff','#f0b429','#f78166']; const names=['Shadow','Diffuse','Specular','Denoise'];
+  ctx.fillStyle='#1a0f0c'; roundRect(ctx,-150,105,300,32,4); ctx.fill(); ctx.fillStyle='#f78166'; ctx.font='10px JetBrains Mono,monospace'; ctx.fillText('PRAM supply 3.07 TB/s',-95,125);
+  for(let L=0;L<4;L++){const y=60-L*(layerH+gap);ctx.fillStyle='#1a1f2e';ctx.strokeStyle='#30363d';roundRect(ctx,-w/2,y-layerH/2,w,layerH,4);ctx.fill();ctx.stroke();ctx.fillStyle='#8b949e';ctx.font='10px JetBrains Mono,monospace';ctx.fillText('L'+(L+1)+' '+names[L],-w/2+8,y-layerH/2+12);for(let i=0;i<36;i++){const col=i%6,row=Math.floor(i/6);const ax=-w/2+26+col*40,ay=y-16+row*11;const alu=state.alus2d[L*36+i];const age=state.phys.time-(alu.lastData||0);const win=state.phys.stetMode?0.045:0.1;const active=age<win;ctx.fillStyle=active?(state.phys.stetMode?'#d2a8ff':colors[L]):'#222';ctx.fillRect(ax,ay,9,7)}}
+  if(state.phys.showFlow&&Math.random()<0.18*state.phys.speed)spawnParticle2D((Math.random()-.5)*180,120,-70,2,'#ff9f6b');
+  state.particles2d.forEach(pt=>pt.y-=pt.speed*state.phys.speed*1.7);
+  state.particles2d=state.particles2d.filter(pt=>{if(pt.y<=pt.targetY){const n=state.phys.stetMode?4:12;for(let k=0;k<n;k++){const a=state.alus2d[Math.floor(Math.random()*state.alus2d.length)];if(a)a.lastData=state.phys.time}return false}return true});
+}
+
+/* ========== ALL 2D ========== */
+function buildAll2D(){
+  document.getElementById('title-bar').innerHTML='ALL <span>· 2D · motherboard · real idle-scan · Pong</span>';
+  buildControls([
+    {id:'powerBtn',label:'Power ON',action:()=>{if(!state.all.power){state.all.power=true;state.all.bootTimer=0;state.all.bootStep=0;state.all.bootLog=['> Power button pressed'];state.all.osAssigned=false;state.all.desktop=false}}},
+    {id:'resetBoot',label:'Power OFF',action:()=>{state.all.power=false;state.all.bootStep=0;state.all.bootTimer=0;state.all.bootLog=[];state.all.desktop=false;state.all.osAssigned=false;closePong()}},
+    {id:'speed',label:'Sim speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}
+  ]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#3fb950"></div>PCPU 2L</div><div class="row"><div class="swatch" style="background:#f78166"></div>PRAM</div><div class="row"><div class="swatch" style="background:#d2a8ff"></div>PGPU</div><div class="row"><div class="swatch" style="background:#f0b429"></div>Active path</div>`;
+}
+
+function drawAllSystem(ctx,W,H){
+  const boardW=Math.min(520,W*0.52), boardH=Math.min(380,H*0.55);
+  const bx=24, by=50;
+  const monW=Math.min(480,W*0.4), monH=monW*0.62;
+  const mx=W-monW-20, my=48;
+  const kw=Math.min(720,W*0.72), kh=68;
+  const kx=(W-kw)/2, ky=H-kh-10;
+
+  // Motherboard
+  ctx.fillStyle='#0d1a12'; ctx.strokeStyle='#1a3d28'; ctx.lineWidth=2;
+  roundRect(ctx,bx,by,boardW,boardH,6); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle='rgba(40,80,50,0.45)'; ctx.lineWidth=1;
+  for(let i=0;i<12;i++){ctx.beginPath();ctx.moveTo(bx+20,by+30+i*28);ctx.lineTo(bx+boardW-20,by+30+i*28);ctx.stroke()}
+  for(let i=0;i<8;i++){ctx.beginPath();ctx.moveTo(bx+40+i*55,by+15);ctx.lineTo(bx+40+i*55,by+boardH-15);ctx.stroke()}
+
+  const cx=bx+boardW*0.28, cy=by+boardH*0.38;
+  ctx.fillStyle='#1a2332'; ctx.strokeStyle=state.all.power?'#3fb950':'#30363d'; ctx.lineWidth=2;
+  roundRect(ctx,cx-55,cy-50,110,100,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#3fb950'; ctx.font='bold 11px JetBrains Mono,monospace'; ctx.fillText('PCPU 2L',cx-32,cy-32);
+  // layers with load
+  for(let L=0;L<2;L++){
+    const sel=state.all.osAssigned&&state.phys.osLayer===L;
+    ctx.fillStyle=sel?'#3fb950':'#2d4a35';
+    ctx.fillRect(cx-40,cy-18+L*22,80,16);
+    ctx.fillStyle='#e6edf3'; ctx.font='9px JetBrains Mono,monospace';
+    ctx.fillText('L'+L+' load '+state.phys.layerLoad[L].toFixed(2)+(sel?' *OS':''),cx-36,cy-6+L*22);
+  }
+  if(state.phys.showHeat||state.all.power){ctx.fillStyle='rgba(139,92,246,0.4)';ctx.fillRect(cx-42,cy+2,84,3)}
+
+  ctx.fillStyle='#2a1a14'; ctx.strokeStyle='#f78166'; ctx.lineWidth=1.5;
+  roundRect(ctx,cx-50,cy+42,100,28,3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#f78166'; ctx.font='10px JetBrains Mono,monospace'; ctx.fillText('PRAM 16GB',cx-30,cy+60);
+
+  const gx=bx+boardW*0.72, gy=by+boardH*0.36;
+  ctx.fillStyle='#1a1f2e'; ctx.strokeStyle='#d2a8ff'; ctx.lineWidth=2;
+  roundRect(ctx,gx-60,gy-45,120,90,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#d2a8ff'; ctx.font='bold 11px JetBrains Mono,monospace'; ctx.fillText('PGPU',gx-22,gy-28);
+  ctx.fillStyle='#8b949e'; ctx.font='9px JetBrains Mono,monospace'; ctx.fillText('16k ALU proxy',gx-40,gy-12);
+  for(let i=0;i<4;i++){ctx.fillStyle=['#3fb950','#58a6ff','#f0b429','#f78166'][i];ctx.fillRect(gx-45+i*24,gy+8,20,10)}
+
+  ctx.fillStyle='#1e2430'; ctx.strokeStyle='#30363d';
+  roundRect(ctx,bx+20,by+boardH-70,80,40,3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='9px JetBrains Mono,monospace'; ctx.fillText('VRM 12V',bx+32,by+boardH-45);
+  roundRect(ctx,bx+120,by+boardH-70,100,40,3); ctx.fill(); ctx.stroke();
+  ctx.fillText('PCH / I/O',bx+140,by+boardH-45);
+
+  if(state.all.power){
+    const t=state.phys.time;
+    ctx.strokeStyle='#f78166'; ctx.lineWidth=2; ctx.setLineDash([4,4]); ctx.lineDashOffset=-t*30;
+    ctx.beginPath(); ctx.moveTo(cx,cy+42); ctx.lineTo(cx,cy+50); ctx.stroke();
+    ctx.strokeStyle='#58a6ff'; ctx.beginPath(); ctx.moveTo(cx+55,cy); ctx.lineTo(gx-60,gy); ctx.stroke();
+    ctx.strokeStyle='#d2a8ff'; ctx.beginPath(); ctx.moveTo(gx,gy+45); ctx.lineTo(cx+30,cy+55); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.fillStyle='rgba(0,0,0,0.55)'; roundRect(ctx,bx+8,by+8,boardW-16,78,3); ctx.fill();
+  ctx.font='10px JetBrains Mono,monospace'; ctx.fillStyle='#3fb950';
+  const logs=state.all.bootLog.slice(-5);
+  logs.forEach((m,i)=>ctx.fillText(m.substring(0,54),bx+14,by+22+i*13));
+  if(!state.all.power){ctx.fillStyle='#8b949e';ctx.fillText('System off — press POWER',bx+14,by+30)}
+
+  ctx.fillStyle='#8b949e'; ctx.font='10px JetBrains Mono,monospace'; ctx.fillText('PENTAL ATX · SoIC · behavioral prototype',bx+8,by+boardH-8);
+
+  // Monitor
+  ctx.fillStyle='#1a1a1a'; ctx.strokeStyle='#30363d'; ctx.lineWidth=3;
+  roundRect(ctx,mx-8,my-8,monW+16,monH+16,6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#0d1117'; roundRect(ctx,mx,my,monW,monH,2); ctx.fill();
+  state.all.monRect={x:mx,y:my,w:monW,h:monH};
+
+  if(!state.all.power){
+    ctx.fillStyle='#050508'; ctx.fillRect(mx,my,monW,monH);
+    ctx.fillStyle='#333'; ctx.font='14px JetBrains Mono,monospace'; ctx.fillText('NO SIGNAL',mx+monW/2-40,my+monH/2);
+  } else if(!state.all.desktop){
+    ctx.fillStyle='#0a0c10'; ctx.fillRect(mx,my,monW,monH);
+    ctx.fillStyle='#3fb950'; ctx.font='12px JetBrains Mono,monospace'; ctx.fillText('PENTAL UEFI',mx+12,my+22);
+    state.all.bootLog.forEach((m,i)=>{if(i<11){ctx.fillStyle='#8b949e';ctx.font='11px JetBrains Mono,monospace';ctx.fillText(m,mx+12,my+42+i*15)}});
+    if(state.all.osAssigned){ctx.fillStyle='#f0b429';ctx.fillText('→ OS on Layer '+state.phys.osLayer+' (idle-scan)',mx+12,my+monH-18)}
+  } else {
+    ctx.fillStyle='#0d1b2a'; ctx.fillRect(mx,my,monW,monH);
+    ctx.fillStyle='#1b2838'; ctx.fillRect(mx,my+monH-28,monW,28);
+    ctx.fillStyle='#66c0f4'; ctx.font='11px Inter,sans-serif'; ctx.fillText('PENTAL Desktop',mx+10,my+monH-10);
+    const ix=mx+28, iy=my+24, iw=48, ih=56;
+    state.all.pongIconRect={x:ix,y:iy,w:iw,h:ih};
+    ctx.fillStyle='#1a2332'; roundRect(ctx,ix,iy,iw,ih,4); ctx.fill();
+    ctx.fillStyle='#3fb950'; ctx.fillRect(ix+8,iy+8,32,28);
+    ctx.fillStyle='#e6edf3'; ctx.font='9px Inter,sans-serif'; ctx.fillText('Pong',ix+12,iy+50);
+    ctx.fillStyle='#8b949e'; ctx.font='10px Inter,sans-serif'; ctx.fillText('Double-click icon to play',mx+12,my+monH-40);
+  }
+  ctx.fillStyle='#30363d'; ctx.fillRect(mx+monW/2-20,my+monH+8,40,8); ctx.fillRect(mx+monW/2-40,my+monH+16,80,6);
+
+  // Keyboard
+  ctx.fillStyle='#161b22'; ctx.strokeStyle='#30363d'; ctx.lineWidth=2;
+  roundRect(ctx,kx,ky,kw,kh,6); ctx.fill(); ctx.stroke();
+  const keyRows=[['`','1','2','3','4','5','6','7','8','9','0'],['Q','W','E','R','T','Y','U','I','O','P'],['A','S','D','F','G','H','J','K','L'],['Z','X','C','V','B','N','M']];
+  const keyW=(kw-120)/12, keyH=14;
+  keyRows.forEach((row,ri)=>{row.forEach((k,ki)=>{
+    const x=kx+20+ki*(keyW+3)+(ri%2)*8, y=ky+8+ri*(keyH+3);
+    ctx.fillStyle='#21262d'; roundRect(ctx,x,y,keyW,keyH,2); ctx.fill();
+    ctx.fillStyle='#8b949e'; ctx.font='8px JetBrains Mono,monospace'; ctx.fillText(k,x+3,y+10);
+  })});
+  const powerX=kx+kw-90, powerY=ky+18, powerW=70, powerH=36;
+  state.all.powerRect={x:powerX,y:powerY,w:powerW,h:powerH};
+  ctx.fillStyle=state.all.power?'#3fb950':'#da3633';
+  roundRect(ctx,powerX,powerY,powerW,powerH,4); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='bold 12px JetBrains Mono,monospace'; ctx.fillText(state.all.power?'ON':'POWER',powerX+14,powerY+23);
+  ctx.fillStyle='#8b949e'; ctx.font='9px Inter,sans-serif'; ctx.fillText('Click POWER · after boot double-click Pong',kx+16,ky+kh-8);
+}
+
+/* ALL 3D — schematic board in Three.js */
+function buildAll3D(){
+  document.getElementById('title-bar').innerHTML='ALL <span>· 3D schematic · same physics · use 2D for boot UI</span>';
+  const group=new THREE.Group(); state.objects.root=group; state.scene.add(group);
+  // PCB
+  const pcb=new THREE.Mesh(new THREE.BoxGeometry(8,0.12,6), new THREE.MeshStandardMaterial({color:0x0d1a12,metalness:0.3,roughness:0.7}));
+  group.add(pcb);
+  // CPU stack 2-layer
+  for(let L=0;L<2;L++){
+    const die=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.25,1.8), new THREE.MeshStandardMaterial({color:0x1a2332,metalness:0.4,roughness:0.5}));
+    die.position.set(-1.8,0.2+L*0.35,0); group.add(die);
+  }
+  const th=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.04,1.7), new THREE.MeshStandardMaterial({color:0x8b5cf6,emissive:0x8b5cf6,emissiveIntensity:0.4}));
+  th.position.set(-1.8,0.35,0); th.userData={isThrolter:true}; group.add(th);
+  // PRAM
+  const pram=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.5,1.6), new THREE.MeshStandardMaterial({color:0x2a1a14,metalness:0.3,roughness:0.6}));
+  pram.position.set(-1.8,-0.45,0); group.add(pram);
+  // GPU
+  const gpu=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.35,1.8), new THREE.MeshStandardMaterial({color:0x1a1f2e,metalness:0.4,roughness:0.5}));
+  gpu.position.set(2.0,0.25,0); group.add(gpu);
+  state.aluMeshes=[];
+  for(let i=0;i<16;i++){
+    const a=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.12,0.2), new THREE.MeshStandardMaterial({color:0xd2a8ff,emissive:0xd2a8ff,emissiveIntensity:0.3}));
+    a.position.set(1.3+(i%4)*0.35,0.5, -0.5+Math.floor(i/4)*0.35); group.add(a); state.aluMeshes.push(a);
+  }
+  const lbl=createTextSprite('ALL 3D = topology only · boot/Pong in 2D',0.9); lbl.position.set(0,1.8,0); group.add(lbl);
+  buildControls([
+    {id:'to2d',label:'Switch to 2D for boot',action:()=>setView('2d')},
+    {id:'speed',label:'Sim speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}
+  ]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#3fb950"></div>CPU stack</div><div class="row"><div class="swatch" style="background:#f78166"></div>PRAM</div><div class="row"><div class="swatch" style="background:#d2a8ff"></div>PGPU</div>`;
+}
+
+/* Pong */
+function openPong(){
+  state.pong.running=true; state.pong.scoreP=0; state.pong.scoreA=0; state.pong.serve=true;
+  state.pong.bx=320; state.pong.by=200; state.pong.px=20; state.pong.py=170; state.pong.ai=170;
+  document.getElementById('pong-overlay').classList.add('show');
+  pongLoop();
+}
+function closePong(){state.pong.running=false; document.getElementById('pong-overlay').classList.remove('show')}
+function pongLoop(){
+  if(!state.pong.running)return;
+  const c=document.getElementById('pong-canvas'); const ctx=c.getContext('2d');
+  const p=state.pong;
+  const target=p.by-30; p.ai+=(target-p.ai)*0.09; p.ai=Math.max(0,Math.min(340,p.ai));
+  if(!p.serve){
+    p.bx+=p.bvx; p.by+=p.bvy;
+    if(p.by<0||p.by>400)p.bvy*=-1;
+    if(p.bx<30&&p.by>p.py&&p.by<p.py+60){p.bvx=Math.abs(p.bvx)*1.04; p.bvy+=(p.by-(p.py+30))/22}
+    if(p.bx>610&&p.by>p.ai&&p.by<p.ai+60){p.bvx=-Math.abs(p.bvx)*1.04; p.bvy+=(p.by-(p.ai+30))/22}
+    if(p.bx<0){p.scoreA++; p.serve=true; p.bx=320; p.by=200}
+    if(p.bx>640){p.scoreP++; p.serve=true; p.bx=320; p.by=200}
+  }
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,640,400);
+  ctx.strokeStyle='#30363d'; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.moveTo(320,0); ctx.lineTo(320,400); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='#3fb950'; ctx.fillRect(p.px,p.py,12,60);
+  ctx.fillStyle='#f78166'; ctx.fillRect(628,p.ai,12,60);
+  ctx.beginPath(); ctx.arc(p.bx,p.by,7,0,Math.PI*2); ctx.fillStyle='#e6edf3'; ctx.fill();
+  document.getElementById('pong-score').textContent=p.scoreP+' – '+p.scoreA;
+  requestAnimationFrame(pongLoop);
+}
+
+/* THREE helpers */
+function teardownThree(){if(state.renderer){state.renderer.dispose();const c=state.renderer.domElement;if(c&&c.parentNode)c.parentNode.removeChild(c)}state.scene=null;state.camera=null;state.renderer=null;state.controls=null}
+function initThree(){
+  if(!state.threeReady||typeof THREE==='undefined')return;
+  const vp=document.getElementById('viewport'); const w=window.innerWidth,h=window.innerHeight;
+  state.scene=new THREE.Scene(); state.scene.background=new THREE.Color(0x0a0c10); state.scene.fog=new THREE.Fog(0x0a0c10,18,50);
+  state.camera=new THREE.PerspectiveCamera(45,w/h,0.1,200); state.camera.position.set(8,6,10);
+  state.renderer=new THREE.WebGLRenderer({antialias:true}); state.renderer.setSize(w,h); state.renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  vp.appendChild(state.renderer.domElement);
+  state.controls=new THREE.OrbitControls(state.camera,state.renderer.domElement); state.controls.enableDamping=true; state.controls.target.set(0,1.2,0);
+  state.scene.add(new THREE.AmbientLight(0x404050,0.55));
+  const key=new THREE.DirectionalLight(0xffffff,0.85); key.position.set(8,14,6); state.scene.add(key);
+  state.scene.add(new THREE.GridHelper(30,30,0x1e2430,0x151820));
+  window.addEventListener('resize',()=>{if(!state.camera||!state.renderer)return;state.camera.aspect=window.innerWidth/window.innerHeight;state.camera.updateProjectionMatrix();state.renderer.setSize(window.innerWidth,window.innerHeight)});
+}
+function createTextSprite(text,scale=1){
+  const canvas=document.createElement('canvas'); canvas.width=512; canvas.height=64;
+  const ctx=canvas.getContext('2d'); ctx.fillStyle='rgba(10,12,16,0.75)'; ctx.fillRect(0,0,512,64);
+  ctx.font='600 24px JetBrains Mono,monospace'; ctx.fillStyle='#e6edf3'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text,256,32);
+  const tex=new THREE.CanvasTexture(canvas); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false});
+  const sp=new THREE.Sprite(mat); sp.scale.set(3.2*scale,0.4*scale,1); return sp;
+}
+function buildPCPU3D(){
+  document.getElementById('title-bar').innerHTML='PCPU <span>· 3D · 2-layer · 32 ALUs proxy</span>';
+  const group=new THREE.Group(); state.objects.root=group; state.scene.add(group);
+  const layerH=0.55,gap=0.22,layerSize=4.0;
+  const colors={silicon:0x1a2332,alu:0x3fb950,core:0x2d3a4f,pmpwH:0x58a6ff,pmpwV:0xf0b429,throlter:0x8b5cf6,tsv:0xc9d1d9};
+  const base=new THREE.Mesh(new THREE.BoxGeometry(5,0.18,5),new THREE.MeshStandardMaterial({color:0x0d1117,metalness:0.7,roughness:0.35})); base.position.y=-0.2; group.add(base);
+  const names=['L0 · Compute','L1 · OS candidate'];
+  state.aluMeshes=[];
+  for(let L=0;L<2;L++){
+    const y=L*(layerH+gap);
+    const die=new THREE.Mesh(new THREE.BoxGeometry(layerSize,layerH*0.85,layerSize),new THREE.MeshStandardMaterial({color:colors.silicon,metalness:0.4,roughness:0.55,transparent:true,opacity:0.92}));
+    die.position.y=y+layerH*0.4; group.add(die);
+    for(let cx=0;cx<2;cx++)for(let cz=0;cz<2;cz++){
+      const ox=(cx-0.5)*1.6,oz=(cz-0.5)*1.6;
+      const core=new THREE.Mesh(new THREE.BoxGeometry(1.3,layerH*0.5,1.3),new THREE.MeshStandardMaterial({color:colors.core,metalness:0.3,roughness:0.6}));
+      core.position.set(ox,y+layerH*0.35,oz); group.add(core);
+      for(let ax=0;ax<2;ax++)for(let az=0;az<2;az++){
+        const alu=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.2,0.36),new THREE.MeshStandardMaterial({color:colors.alu,emissive:colors.alu,emissiveIntensity:0.15}));
+        alu.position.set(ox+(ax-0.5)*0.5,y+layerH*0.55,oz+(az-0.5)*0.5); group.add(alu); state.aluMeshes.push(alu);
+      }
+    }
+    for(let i=0;i<6;i++){const z=-1.6+i*0.55; const wire=new THREE.Mesh(new THREE.BoxGeometry(layerSize*0.9,0.02,0.035),new THREE.MeshStandardMaterial({color:colors.pmpwH,emissive:colors.pmpwH,emissiveIntensity:0.35})); wire.position.set(0,y+layerH*0.7,z); group.add(wire)}
+    for(let i=0;i<6;i++){const x=-1.6+i*0.55; const wire=new THREE.Mesh(new THREE.BoxGeometry(0.035,0.02,layerSize*0.9),new THREE.MeshStandardMaterial({color:colors.pmpwV,emissive:colors.pmpwV,emissiveIntensity:0.25})); wire.position.set(x,y+layerH*0.66,0); group.add(wire)}
+    if(L===0){const th=new THREE.Mesh(new THREE.BoxGeometry(layerSize*0.95,0.03,layerSize*0.95),new THREE.MeshStandardMaterial({color:colors.throlter,emissive:colors.throlter,emissiveIntensity:0.45,transparent:true,opacity:0.85})); th.position.y=y+layerH+gap*0.5; th.userData={isThrolter:true}; group.add(th)}
+    const label=createTextSprite(names[L],0.75); label.position.set(0,y+layerH*0.85,layerSize*0.55+0.25); group.add(label);
+  }
+  const tsvPos=[]; for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const h=2*(layerH+gap)+0.2; const tsv=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,h,8),new THREE.MeshStandardMaterial({color:colors.tsv,metalness:0.85})); tsv.position.set(i,h/2-0.1,j); group.add(tsv); tsvPos.push({x:i,z:j})}
+  for(let i=0;i<24;i++){const tsv=tsvPos[Math.floor(Math.random()*tsvPos.length)]; const p=new THREE.Mesh(new THREE.SphereGeometry(0.045,6,6),new THREE.MeshStandardMaterial({color:0x58a6ff,emissive:0x58a6ff,emissiveIntensity:0.9})); p.position.set(tsv.x,Math.random()*1.8,tsv.z); p.userData={tsv,speed:0.7+Math.random(),dir:Math.random()>0.4?1:-1,maxY:1.9}; group.add(p); state.dataParticles.push(p)}
+  buildControls([{id:'toggleFlow',label:'Data flow',action:()=>{state.phys.showFlow=!state.phys.showFlow}},{id:'toggleHeat',label:'Throlter',action:()=>{state.phys.showHeat=!state.phys.showHeat}},{id:'speed',label:'Speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#3fb950"></div>ALU</div><div class="row"><div class="swatch" style="background:#58a6ff"></div>PMPW H</div><div class="row"><div class="swatch" style="background:#f0b429"></div>PMPW V</div><div class="row"><div class="swatch" style="background:#8b5cf6"></div>Throlter</div>`;
+}
+function buildPRAM3D(){
+  document.getElementById('title-bar').innerHTML='PRAM <span>· 3D · 3.07 TB/s ceiling</span>';
+  const group=new THREE.Group(); state.objects.root=group; state.scene.add(group);
+  const layerH=0.2,gap=0.07,layerSize=3.8;
+  for(let L=0;L<6;L++){const y=L*(layerH+gap); const die=new THREE.Mesh(new THREE.BoxGeometry(layerSize,layerH*0.85,layerSize),new THREE.MeshStandardMaterial({color:0x2a1a14,metalness:0.3,roughness:0.6,transparent:true,opacity:0.9})); die.position.y=y; group.add(die); for(let i=0;i<5;i++)for(let j=0;j<5;j++){const cell=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.07,0.22),new THREE.MeshStandardMaterial({color:0xf78166,emissive:0xf78166,emissiveIntensity:0.2})); cell.position.set(-1.3+i*0.55,y+layerH*0.3,-1.3+j*0.55); group.add(cell); state.aluMeshes.push(cell)}}
+  const tsvPos=[]; for(let i=-1.2;i<=1.2;i+=0.6)for(let j=-1.2;j<=1.2;j+=0.6){const h=6*(layerH+gap)+0.3; const tsv=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,h,8),new THREE.MeshStandardMaterial({color:0xc9d1d9,metalness:0.85})); tsv.position.set(i,h/2-0.05,j); group.add(tsv); tsvPos.push({x:i,z:j})}
+  for(let i=0;i<28;i++){const tsv=tsvPos[Math.floor(Math.random()*tsvPos.length)]; const p=new THREE.Mesh(new THREE.SphereGeometry(0.04,6,6),new THREE.MeshStandardMaterial({color:0xf78166,emissive:0xf78166,emissiveIntensity:0.8})); p.position.set(tsv.x,Math.random()*1.8,tsv.z); p.userData={tsv,speed:0.8+Math.random(),dir:1,maxY:1.9}; group.add(p); state.dataParticles.push(p)}
+  buildControls([{id:'toggleFlow',label:'Charge flow',action:()=>{state.phys.showFlow=!state.phys.showFlow}},{id:'speed',label:'Speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#f78166"></div>Cell</div><div class="row"><div class="swatch" style="background:#c9d1d9"></div>TSV</div>`;
+}
+function buildPGPU3D(){
+  document.getElementById('title-bar').innerHTML='PGPU <span>· 3D · STET/DTET model</span>';
+  const group=new THREE.Group(); state.objects.root=group; state.scene.add(group);
+  const layerH=0.45,gap=0.16,layerSize=5.2; const dtet=[0x3fb950,0x58a6ff,0xf0b429,0xf78166]; const names=['Shadow','Diffuse','Specular','Denoise'];
+  const pram=new THREE.Mesh(new THREE.BoxGeometry(layerSize*0.85,0.35,layerSize*0.85),new THREE.MeshStandardMaterial({color:0x3d1f1a,transparent:true,opacity:0.7})); pram.position.y=-0.5; group.add(pram);
+  state.aluMeshes=[];
+  for(let L=0;L<4;L++){const y=L*(layerH+gap)+0.25; const die=new THREE.Mesh(new THREE.BoxGeometry(layerSize,layerH*0.8,layerSize),new THREE.MeshStandardMaterial({color:0x1a1f2e,metalness:0.4,roughness:0.55,transparent:true,opacity:0.88})); die.position.y=y; group.add(die);
+    const gridN=7,pitch=(layerSize-0.7)/(gridN-1);
+    for(let i=0;i<gridN;i++)for(let j=0;j<gridN;j++){const alu=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.16,0.28),new THREE.MeshStandardMaterial({color:0xd2a8ff,emissive:0xd2a8ff,emissiveIntensity:0.25})); alu.position.set(-layerSize/2+0.35+i*pitch,y+layerH*0.42,-layerSize/2+0.35+j*pitch); alu.userData={dtetColor:dtet[L]}; group.add(alu); state.aluMeshes.push(alu)}
+    const label=createTextSprite('L'+(L+1)+' '+names[L],0.55); label.position.set(0,y+layerH*0.65,layerSize*0.5+0.2); group.add(label)}
+  for(let p=0;p<22;p++){const particle=new THREE.Mesh(new THREE.SphereGeometry(0.045,6,6),new THREE.MeshStandardMaterial({color:0xff9f6b,emissive:0xff9f6b,emissiveIntensity:0.7})); particle.position.set((Math.random()-.5)*3.5,-0.2+Math.random()*2.2,(Math.random()-.5)*3.5); particle.userData={speed:0.55+Math.random()}; group.add(particle); state.dataParticles.push(particle)}
+  buildControls([{id:'modeSTET',label:'STET',action:()=>{state.phys.stetMode=true;applyPGPUMode3D()}},{id:'modeDTET',label:'DTET',action:()=>{state.phys.stetMode=false;applyPGPUMode3D()}},{id:'toggleFlow',label:'Data flow',action:()=>{state.phys.showFlow=!state.phys.showFlow}},{id:'speed',label:'Speed ×2',action:()=>{state.phys.speed=state.phys.speed===1?2:1}}]);
+  document.getElementById('legend').innerHTML=`<div class="row"><div class="swatch" style="background:#d2a8ff"></div>STET</div><div class="row"><div class="swatch" style="background:#3fb950"></div>L1</div><div class="row"><div class="swatch" style="background:#58a6ff"></div>L2</div><div class="row"><div class="swatch" style="background:#f0b429"></div>L3</div><div class="row"><div class="swatch" style="background:#f78166"></div>L4</div>`;
+  applyPGPUMode3D();
+}
+function applyPGPUMode3D(){state.aluMeshes.forEach(alu=>{if(!alu.material||!alu.userData)return; if(state.phys.stetMode){alu.material.color.setHex(0xd2a8ff);alu.material.emissive.setHex(0xd2a8ff)}else{alu.material.color.setHex(alu.userData.dtetColor);alu.material.emissive.setHex(alu.userData.dtetColor)}})}
+
+function buildControls(items){const box=document.getElementById('controls');box.innerHTML='';items.forEach(item=>{const btn=document.createElement('button');btn.id=item.id;btn.textContent=item.label;btn.addEventListener('click',()=>{item.action();btn.classList.toggle('active')});box.appendChild(btn)})}
+function fillInfoPanel(){
+  const el=document.getElementById('info-panel');
+  if(state.mode==='pcpu')el.innerHTML=`<h3>PCPU – 2-layer behavioral</h3><div class="metrics"><div class="metric"><div class="k">Layers / ALUs</div><div class="v">2 / 32</div></div><div class="metric"><div class="k">Clock</div><div class="v">5.1 GHz</div></div><div class="metric"><div class="k">bytes/op</div><div class="v">24 (FMA64)</div></div></div><p>Demand from ALUs×GHz×24 B. Particles are visual; ALUs light after proxy arrival. Throlter off derates thermalFactor. <span class="note">Not cycle-accurate.</span></p>`;
+  else if(state.mode==='pram')el.innerHTML=`<h3>PRAM</h3><div class="metrics"><div class="metric"><div class="k">Supply</div><div class="v">3.07 TB/s</div></div><div class="metric"><div class="k">Base latency</div><div class="v">4.0 ns</div></div></div><p>Hard BW ceiling. Queue grows if demand higher → latency += queue×0.15 (placeholder coef). <span class="note">Not RC-accurate TSV model.</span></p>`;
+  else if(state.mode==='pgpu')el.innerHTML=`<h3>PGPU</h3><div class="metrics"><div class="metric"><div class="k">ALUs (real count)</div><div class="v">16 384</div></div><div class="metric"><div class="k">Drawn</div><div class="v">proxy grid</div></div></div><p>STET util = 1−0.85×divergentFraction. DTET ~94%. Demand uses 12 B/op (FP32 path). <span class="note">Divergence fraction is a model input, not ray-traced.</span></p>`;
+  else el.innerHTML=`<h3>All – system behavioral</h3><div class="metrics"><div class="metric"><div class="k">OS assignment</div><div class="v">argmin(layerLoad)</div></div><div class="metric"><div class="k">2D / 3D</div><div class="v">both</div></div></div><p><strong>Idle-scan is real in code:</strong> assignOSLayer() picks lowest layerLoad. Boot is a timed state machine. Pong opens on double-click of icon hit-rect. 3D All shows topology; use 2D for full boot UI. <span class="note">Behavioral prototype — not Verilog.</span></p>`;
+}
+
+let lastFrame=performance.now();
+function animate(){
+  state.animId=requestAnimationFrame(animate);
+  const now=performance.now(); const dt=Math.min(0.05,(now-lastFrame)/1000); lastFrame=now;
+  physicsStep(dt);
+  if(state.view==='2d')draw2D();
+  else if(state.view==='3d'&&state.renderer){
+    const util=state.phys.aluUtil/100;
+    state.aluMeshes.forEach((alu,idx)=>{if(!alu.material)return; const phase=(state.phys.time*6+idx*0.15)%(Math.PI*2); alu.material.emissiveIntensity=0.12+0.4*util*(0.5+0.5*Math.sin(phase))});
+    state.dataParticles.forEach(p=>{p.visible=state.phys.showFlow; if(!state.phys.showFlow)return; if(p.userData.tsv){p.position.y+=p.userData.dir*p.userData.speed*0.016*state.phys.speed; if(p.position.y>p.userData.maxY){p.position.y=0;p.userData.dir=1} if(p.position.y<0){p.position.y=p.userData.maxY;p.userData.dir=-1}}else{p.position.y+=p.userData.speed*0.012*state.phys.speed; if(p.position.y>2.5)p.position.y=-0.2}});
+    if(state.objects.root)state.objects.root.traverse(obj=>{if(obj.userData&&obj.userData.isThrolter)obj.material.emissiveIntensity=state.phys.showHeat?(0.3+0.35*(0.5+0.5*Math.sin(state.phys.time*3))):0.08});
+    if(state.controls)state.controls.update(); state.renderer.render(state.scene,state.camera);
+  }
+  updateLiveProof();
+}
+function updateLiveProof(){
+  const el=document.getElementById('live-proof'); if(!el||!state.mode)return;
+  const p=state.phys;
+  let modeNote=state.mode==='pcpu'?'PMPW 2L':state.mode==='pram'?'Voltage-coord':state.mode==='pgpu'?(p.stetMode?'STET':'DTET'):('Boot:'+p.bootPhase);
+  const utilClass=p.aluUtil>80?'ok':(p.aluUtil>50?'hot':'bad');
+  const qClass=p.queueDepth>2?'bad':'ok';
+  el.innerHTML=`<div class="title">Live physics (documented)</div>
+    <div class="row"><span>Cycles (visual×${SPEC.VISUAL_CYCLE_SCALE})</span><span class="val">${Math.floor(p.cycles).toLocaleString()}</span></div>
+    <div class="row"><span>Data moved (paced)</span><span class="val">${p.dataMovedGB.toFixed(2)} GB</span></div>
+    <div class="row"><span>ALU util</span><span class="val ${utilClass}">${p.aluUtil.toFixed(1)}%</span></div>
+    <div class="row"><span>Demand/Supply</span><span class="val">${p.demandTBs.toFixed(3)}/${p.supplyTBs.toFixed(2)} TB/s</span></div>
+    <div class="row"><span>Queue</span><span class="val ${qClass}">${p.queueDepth.toFixed(1)}</span></div>
+    <div class="row"><span>Latency</span><span class="val">${p.latencyNs.toFixed(2)} ns</span></div>
+    <div class="row"><span>Thermal</span><span class="val">${p.thermalFactor.toFixed(2)}</span></div>
+    <div class="row"><span>OS layer / loads</span><span class="val hot">L${p.osLayer} [${p.layerLoad.map(x=>x.toFixed(2)).join(',')}]</span></div>
+    <div class="row"><span>Mode</span><span class="val">${modeNote}</span></div>`;
+}
+</script>
+</body>
+</html>
