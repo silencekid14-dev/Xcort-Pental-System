@@ -4,7 +4,7 @@
 
 [![Status](https://img.shields.io/badge/status-specification-blue)]()
 [![Revision](https://img.shields.io/badge/rev-2.0-green)]()
-[![Layers](https://img.shields.io/badge/layers-4%20to%2073-orange)]()
+[![Layers](https://img.shields.io/badge/layers-2%20to%2073-orange)]()
 [![License](https://img.shields.io/badge/license-see%20LICENSE-lightgrey)]()
 
 ---
